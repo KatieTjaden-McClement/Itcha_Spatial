@@ -54,7 +54,23 @@ crs.utm <- lonlat2UTM(c(mlong,mlat))
 sta.wgs <- st_as_sf(sta, coords = c("longitude", "latitude"), crs=4326) # Note the CRS tells R that the projection is WGS1984
 
 ## Convert the lat long to UTM - st_transform
-sta.utm <- st_transform(sta.wgs,crs=crs.utm) 
+sta.utm <- st_transform(sta.wgs,crs=crs.utm)
+
+### Puntzi lat, long, and utm coords for Carolyn:
+# sta.utm_puntzi <- filter(sta.utm, grepl("ITCHA4", station_id)) %>% 
+#   arrange(station_id)
+# puntzi_utm <- as_tibble(st_coordinates(sta.utm_puntzi)) %>% 
+#   rename(UTM.E = X, UTM.N = Y)
+# 
+# sta.wgs_puntzi <- filter(sta.wgs, grepl("ITCHA4", station_id)) %>% 
+#   arrange(station_id)
+# puntzi_lat_long <- as_tibble(st_coordinates(sta.wgs_puntzi)) %>% 
+#   rename(Longitude = X, Latitude = Y)
+# 
+# puntzi_utm_latlong <- tibble(station_id = sta.utm_puntzi$station_id, 
+#                              puntzi_lat_long,
+#                              puntzi_utm)
+# write.csv(puntzi_utm_latlong, file = "Outputs/puntzi_utm_latlon.csv")
 
 ### Buffer these points by 18km to create an area of interest(AOI) 
 tmp <- st_buffer(sta.utm, 18000)
@@ -83,6 +99,29 @@ g1 <- ggmap(mad_map_BH) +
   ggtitle("Itcha-Ilgachuz Camera Trapping Project")
 g1
 
+### Distances between cameras ###
+#install.packages("spatstat")
+# library(spatstat)
+# 
+# sta.utm_sp <- filter(sta.utm, !grepl("ITCHA4", station_id)) %>% 
+#   as_Spatial()
+# aoi_sp <- as_Spatial(aoi)
+# plot(aoi)
+# 
+# bbox <- st_bbox(aoi)
+# 
+# sta_owin <- as.owin(bbox)
+# 
+# pts <- coordinates(sta.utm_sp)
+# p <- ppp(pts[,1], pts[,2], window = sta_owin)
+# 
+# test <- nndist(p, k = 1:5)/1000
+# test <- as.data.frame(test)
+# 
+# test$station_id <- sta.utm_sp$station_id
+# write_csv(test, file = "station_distances.csv")
+# went through and manually removed extra distance measures for side/corner stations or 
+# those that have been re-set in excel and did summary stats
 
 ##### Extract elevation data #####
 
@@ -96,12 +135,22 @@ plot(st_geometry(sta.wgs), add=T)
 # Extract value from raster at each point and add it to your dataframe
 sta$Elevation <- raster::extract(DEM_raster, sta.wgs)
 
+##### Extract ruggedness data #####
+
+vrm3 <- vrm(DEM_raster, s = 3) # double check exactly what s = 3 means
+plot(vrm3)
+
+sta$vrm <- raster::extract(vrm3, sta.wgs)
+
 ##### Extract NDVI data #####
 bands <- mt_bands(product = "MOD13Q1") # MODIS/Terra Vegetation Indices (NDVI/EVI) 16-Day L3 Global 250m SIN Grid
 head(bands)
 
+other_bands <- mt_bands(product = "MCD12Q1")
+head(other_bands)
+
 tmp <- sta %>% 
-  select("station_id", "longitude", "latitude")
+  dplyr::select("station_id", "longitude", "latitude")
 colnames(tmp) <- c("site_name", "lon", "lat")
 tmp <- tmp[,c(1,3,2)]
 str(tmp)
@@ -122,8 +171,29 @@ itcha_ndvi <- mt_batch_subset(product = "MOD13Q1",
                               internal = TRUE)
 hist(itcha_ndvi$value)
 
+# Get Quality Assurance data for NDVI values:
+itcha_vi_qa <- mt_batch_subset(product = "MOD13Q1",
+                               df = tmp,
+                               band = "250m_16_days_VI_Quality",
+                               start = "2020-09-01",
+                               end = "2021-10-31",
+                               km_lr = 0,
+                               km_ab = 0,
+                               internal = TRUE)
+hist(itcha_vi_qa$value)
+# need to convert from decimal to binary to correspond to QA metrics outlined in user guide
+
+itcha_vi_qa <- rename(itcha_vi_qa, "qa_value" = "value")
+
+# add to itcha_ndvi data
+itcha_ndvi$qa_value <- itcha_vi_qa$qa_value
+
 # Remove stuff that is below zero, which are indicative of water
-itcha_ndvi <- filter(itcha_ndvi, value > 0)
+itcha_ndvi_filtered_old <- filter(itcha_ndvi, value > 0)
+# removes 4784-4297 = 487 values
+
+# Valid range of values is -2000 to 10,000 and fill value is -3000, so just remove those
+itcha_ndvi <- filter(itcha_ndvi, value >= -2000) # removes 26 values
 
 itcha_ndvi$calendar_date <- strptime(itcha_ndvi$calendar_date, "%Y-%m-%d")
 
@@ -143,6 +213,7 @@ sta_ndvi <- itcha_ndvi %>%
   group_by(grid, site, month) %>% 
   summarise(ndvi = mean(value),
             ndvi_scaled = ndvi*0.0001)
+# no missing values after new filtering criteria (keeps negative values - likely snow and ice at high elevation)
 
 ggplot(sta_ndvi, aes(x = ym(month), 
                      y = ndvi_scaled, colour = grid)) +
@@ -172,6 +243,116 @@ roads <- st_transform(roads, crs = crs(aoi.utm))
 # need to remove roads that don't actually exist:
 roads <- filter(roads, TRANSPORT_LINE_TYPE_CODE != "X")
 
+
+##### Distance to water #####
+
+# downloaded data from https://maps.canada.ca/czs/index-en.html
+lakes <- st_read(dsn = "Spatial_Layers/Watercourses/waterbody_2.shp") %>% 
+  select("feature_id", "geometry")
+lakes <- st_transform(lakes, crs = crs(aoi.utm))
+plot(st_geometry((lakes)))
+
+rivers <- st_read(dsn = "Spatial_Layers/Watercourses/watercourse_1.shp") %>% 
+  select("feature_id", "geometry")
+rivers <- st_transform(rivers, crs = crs(aoi.utm))
+plot(st_geometry(rivers), add = T)
+
+plot(st_geometry(sta.utm), add = T)
+
+# bind together
+lakes_polyline <- st_cast(lakes, to = "LINESTRING")
+plot(st_geometry(lakes_polyline))
+
+water <- rbind(lakes_polyline, rivers)
+plot(st_geometry(water))
+
+# find nearest water feature to each cam
+closest_water <- st_nearest_feature(sta.utm, water)
+
+closest_water <- water[closest_water, ]
+plot(st_geometry(sta.utm))
+plot(st_geometry(closest_water), add = T) #looks good
+
+# calculate distance to closest water feature
+dist_water <- st_distance(sta.utm, closest_water, by_element = T)
+dist_water_km <- as.numeric(dist_water/1000)
+hist(dist_water_km)
+
+dist_water <- tibble(station_id = sta.utm$station_id, dist_water_km)
+
+# how accurate are these water sources? could be lots of tiny streams and stuff...
+
+## compare to waterbody and watercourse layers from bc data catalougue (freshwater atlas):
+# https://catalogue.data.gov.bc.ca/dataset/freshwater-atlas-stream-network
+# https://catalogue.data.gov.bc.ca/dataset/freshwater-atlas-lakes
+
+fwa_lakes <- st_read("Spatial_Layers/Watercourses/GeoBC/FWA_LAKES_POLY.gdb") %>% 
+  st_transform(crs = crs(aoi.utm)) %>% 
+  select(WATERBODY_POLY_ID) %>% 
+  rename(ID = WATERBODY_POLY_ID) %>% 
+  st_cast("MULTILINESTRING")
+str(fwa_lakes)
+
+fwa_streams <- st_read("Spatial_Layers/Watercourses/GeoBC/FWA_STREAM_NETWORKS_SP.gdb") %>% 
+  st_transform(crs = crs(aoi.utm)) %>% 
+  select(LINEAR_FEATURE_ID) %>% 
+  rename(ID = LINEAR_FEATURE_ID) %>% 
+  st_zm() # remove unneeded z dimension
+str(fwa_streams)
+
+fwa_water <- rbind(fwa_lakes, fwa_streams)
+plot(st_geometry((fwa_water))) # even denser coverage....
+
+# could remove streams below a certian magnitude
+# e.g. order 1 streams (the majority of streams in the dataset) only run during wet periods
+
+# find nearest water feature to each cam
+closest_fwa_water <- st_nearest_feature(sta.utm, fwa_water)
+
+closest_fwa_water <- fwa_water[closest_fwa_water, ]
+plot(st_geometry(sta.utm))
+plot(st_geometry(closest_fwa_water), add = T) #looks good
+
+# calculate distance to closest water feature
+dist_fwa_water <- st_distance(sta.utm, closest_fwa_water, by_element = T)
+dist_fwa_water_km <- as.numeric(dist_fwa_water/1000)
+hist(dist_fwa_water_km)
+
+### Wetlands ###
+# lots of issues with data quality (see emails with Robin Steenweg)
+# FWA seems to be best resource, let's see how it looks
+fwa_wetlands <- st_read("Spatial_Layers/Watercourses/GeoBC/FWA_WETLANDS_POLY") %>% 
+  st_transform(crs = crs(sta.utm))
+head(fwa_wetlands)
+
+plot(st_geometry(fwa_wetlands))
+plot(st_geometry(sta.utm), col = "red", add = T)
+# looks not bad (but you need to expand map to see clearly otherwise it looks a bit crazy)
+
+### BEC Zones ###
+bec <- st_read("Spatial_Layers/BEC/BEC_BIOGEOCLIMATIC_POLY.gdb") %>% 
+  st_transform(crs(aoi.utm))
+
+plot(st_geometry(bec))
+
+bec_plot <- st_intersection(bec, aoi.utm) %>% 
+  st_transform(crs(sta.wgs))
+# plot(bec_plot["ZONE_NAME"])
+# plot(st_geometry(sta.utm), add = T)
+
+ggmap(mad_map_cams) +
+  geom_sf(data = bec_plot, aes(fill = ZONE_NAME), 
+          inherit.aes = F) +
+  geom_sf(data = sta.wgs, inherit.aes = F)
+# most grids are almost entirely within one or 2 bec zones...
+
+# extract zone and subzones at cams
+bec_cams <- st_intersection(sta.utm, bec) %>% 
+  select(station_id, ZONE_NAME, SUBZONE_NAME) %>%
+  as.data.frame() %>% 
+  select(-geometry)
+# all subzones either very dry very cold, very dry cold, or undifferentiated
+
 # Plot all layers with cams
 # par(mfrow=c(1,1))
 # plot(st_geometry(aoi.utm))  # Plot the box
@@ -183,9 +364,11 @@ roads <- filter(roads, TRANSPORT_LINE_TYPE_CODE != "X")
 # plot(st_geometry(sta.utm), add=T, col="red", pch=19) #add cameras
 # #everything looks good!!
 
-fire_40 <- filter(fire, FIRE_YEAR > (2022-40)) # down to 125 polys from 275
-cut_40 <- filter(cut, HARVESTYR > (2022-40)) # down to 6016 from 6072
+fire_40 <- filter(fire, FIRE_YEAR > (2022-40)) 
+cut_40 <- filter(cut, HARVEST_YEAR > (2022-40)) 
 
+cut_20 <- filter(cut, HARVEST_YEAR > (2022-20))
+cut_20_40 <- filter(cut, between(HARVEST_YEAR, (2022-40), (2022-20)))
 
 ##### Buffer cams and extract covariates ####
 
@@ -193,16 +376,17 @@ cut_40 <- filter(cut, HARVESTYR > (2022-40)) # down to 6016 from 6072
 cams_buff <- st_buffer(sta.utm, dist = 500)
 plot(st_geometry(cams_buff))
 
+### Cutblocks < 40 years old
 # clip cutblock polygons to camera buffers
-buff_cut <- st_intersection(cams_buff, cut_40)
-plot(st_geometry(buff_cut))
-head(buff_cut)
+buff_cut_40 <- st_intersection(cams_buff, cut_40)
+plot(st_geometry(buff_cut_40))
+head(buff_cut_40)
 
-length(unique(buff_cut$station_id)) #32 camera sites
-nrow(buff_cut) # 46 fire polygons overlapping with camera buffers
+length(unique(buff_cut_40$station_id)) #71 camera sites
+nrow(buff_cut_40) # 157 cutblock polygons overlapping with camera buffers
 
 # Need to remove overlapping polygons:
-buff_cut <- buff_cut %>% 
+buff_cut_40 <- buff_cut_40 %>% 
   group_by(station_id) %>%
   summarise(geometry = st_combine(geometry)) %>%
   st_cast("POLYGON") %>%
@@ -211,21 +395,89 @@ buff_cut <- buff_cut %>%
   st_union()
 #plot(st_geometry(buff_cut)) #good
 
-buff_cut <- as_Spatial(buff_cut) %>% 
+buff_cut_40 <- as_Spatial(buff_cut_40) %>% 
   st_as_sf()
 
-buff_cut <- st_intersection(cams_buff, buff_cut)
-#plot(st_geometry(buff_cut))
+buff_cut_40 <- st_intersection(cams_buff, buff_cut_40)
+plot(st_geometry(buff_cut_40))
 
 # Calculate area cut within each cam buffer
-buff_cut$area_cut <- st_area(buff_cut$geometry)
+buff_cut_40$area_cut <- st_area(buff_cut_40$geometry)
 
-cut_summary <- buff_cut %>% 
+cut_40_summary <- buff_cut_40 %>% 
   group_by(station_id) %>% 
   summarise(area_cut = sum(area_cut)) %>% 
-  mutate(prop_cut = as.numeric(area_cut/(pi*500^2)))
-hist(cut_summary$prop_cut)
+  mutate(prop_cut_40 = as.numeric(area_cut/(pi*500^2)))
+hist(cut_40_summary$prop_cut_40)
 # can merge prop_cut column with station csv later, adding zeros for missing stations (no cutblocks)
+
+### Cutblocks < 20 years old
+# clip cutblock polygons to camera buffers
+buff_cut_20 <- st_intersection(cams_buff, cut_20)
+plot(st_geometry(buff_cut_20))
+head(buff_cut_20)
+
+length(unique(buff_cut_20$station_id)) #25 camera sites
+nrow(buff_cut_20) # 64 cutblock polygons overlapping with camera buffers
+
+# Need to remove overlapping polygons:
+buff_cut_20 <- buff_cut_20 %>% 
+  group_by(station_id) %>%
+  summarise(geometry = st_combine(geometry)) %>%
+  st_cast("POLYGON") %>%
+  ungroup() %>%
+  # union polygons
+  st_union()
+#plot(st_geometry(buff_cut)) #good
+
+buff_cut_20 <- as_Spatial(buff_cut_20) %>% 
+  st_as_sf()
+
+buff_cut_20 <- st_intersection(cams_buff, buff_cut_20)
+plot(st_geometry(buff_cut_20))
+
+# Calculate area cut within each cam buffer
+buff_cut_20$area_cut <- st_area(buff_cut_20$geometry)
+
+cut_20_summary <- buff_cut_20 %>% 
+  group_by(station_id) %>% 
+  summarise(area_cut = sum(area_cut)) %>% 
+  mutate(prop_cut_20 = as.numeric(area_cut/(pi*500^2)))
+hist(cut_20_summary$prop_cut_20, breaks = 20)
+
+### Cutblocks 20-40 years old
+# clip cutblock polygons to camera buffers
+buff_cut_20_40 <- st_intersection(cams_buff, cut_20_40)
+plot(st_geometry(buff_cut_20_40))
+head(buff_cut_20_40)
+
+length(unique(buff_cut_20_40$station_id)) #59 camera sites
+nrow(buff_cut_20_40) # 93 cutblock polygons overlapping with camera buffers
+
+# Need to remove overlapping polygons:
+buff_cut_20_40 <- buff_cut_20_40 %>% 
+  group_by(station_id) %>%
+  summarise(geometry = st_combine(geometry)) %>%
+  st_cast("POLYGON") %>%
+  ungroup() %>%
+  # union polygons
+  st_union()
+#plot(st_geometry(buff_cut)) #good
+
+buff_cut_20_40 <- as_Spatial(buff_cut_20_40) %>% 
+  st_as_sf()
+
+buff_cut_20_40 <- st_intersection(cams_buff, buff_cut_20_40)
+plot(st_geometry(buff_cut_20_40))
+
+# Calculate area cut within each cam buffer
+buff_cut_20_40$area_cut <- st_area(buff_cut_20_40$geometry)
+
+cut_20_40_summary <- buff_cut_20_40 %>% 
+  group_by(station_id) %>% 
+  summarise(area_cut = sum(area_cut)) %>% 
+  mutate(prop_cut_20_40 = as.numeric(area_cut/(pi*500^2)))
+hist(cut_20_40_summary$prop_cut_20_40, breaks = 20)
 
 ### Repeat with burnt areas ###
 # clip fire polygons to camera buffers
@@ -250,7 +502,7 @@ buff_fire <- as_Spatial(buff_fire) %>%
   st_as_sf()
 
 buff_fire <- st_intersection(cams_buff, buff_fire)
-#plot(st_geometry(buff_fire))
+plot(st_geometry(buff_fire))
 
 # Calculate area cut within each cam buffer
 buff_fire$area_fire <- st_area(buff_fire$geometry)
@@ -275,22 +527,60 @@ road_summary <- buff_roads %>%
          road_dens_km = road_dens_m/1000)
 hist(road_summary$road_dens_km)
 
-### Make tibble with extracted covariates
-station_sp_cov <- select(sta, station_id)
-station_sp_cov <- left_join(station_sp_cov, fire_summary, by = "station_id")
-station_sp_cov <- left_join(station_sp_cov, cut_summary, by = "station_id")
-station_sp_cov <- left_join(station_sp_cov, road_summary, by = "station_id")
-station_sp_cov <- left_join(station_sp_cov, sta, by = "station_id")
+### distance from cam to nearest cutblock edge
+# find nearest cutblock
+closest_cut <- st_nearest_feature(sta.utm, cut_40)
 
-station_sp_cov <- select(station_sp_cov, station_id, prop_cut, prop_fire, road_dens_km, Elevation)
+closest_cut <- cut_40[closest_cut, ]
+plot(st_geometry(sta.utm))
+plot(st_geometry(closest_cut), add = T) #looks good
+
+# calculate distance to closest cut
+dist_cut <- st_distance(sta.utm, closest_cut, by_element = T)
+dist_cut_km <- as.numeric(dist_cut/1000)
+
+
+### Make tibble with extracted covariates
+station_sp_cov <- sta %>% 
+  select(station_id, Elevation, vrm) %>% 
+  left_join(bec_cams, by = "station_id") %>% 
+  left_join(fire_summary, by = "station_id") %>% 
+  left_join(cut_40_summary, by = "station_id") %>% 
+  left_join(cut_20_summary, by = "station_id") %>%
+  left_join(cut_20_40_summary, by = "station_id") %>%
+  left_join(road_summary, by = "station_id") %>% 
+  select(station_id, prop_cut_40, prop_cut_20, prop_cut_20_40, prop_fire, 
+         road_dens_km, Elevation, vrm, ZONE_NAME, SUBZONE_NAME) %>% 
+  mutate(dist_cut_km = dist_cut_km,
+         dist_water_km = dist_water_km)
+
 station_sp_cov[is.na(station_sp_cov)] <- 0
 
-hist(station_sp_cov$prop_cut)
-hist(station_sp_cov$prop_fire)
-hist(station_sp_cov$road_dens_km)
-hist(station_sp_cov$Elevation)
+# convert to long format to plot this faceted over covariates:
+station_sp_cov_long <- station_sp_cov %>% 
+  select(-ZONE_NAME, -SUBZONE_NAME, -prop_cut_20_40,
+         -prop_cut_20, -vrm) %>% 
+  pivot_longer(cols = (-station_id),
+               names_to = "covariate",
+               values_to = "value") %>% 
+  mutate(grid_id = case_when(grepl("ITCHA1", station_id) ~ "Ilgachuz",
+                             grepl("ITCHA2", station_id) ~ "Saddle",
+                             grepl("ITCHA3", station_id) ~ "Itcha",
+                             grepl("ITCHA4", station_id) ~ "Puntzi",
+                             grepl("ITCHA5", station_id) ~ "Chezacut",
+                             grepl("ITCHA6", station_id) ~ "Satah"))
 
-write.csv(station_sp_cov, file = "Station_spatial_covariates.csv")
+ggplot(station_sp_cov_long, aes(x = value)) + 
+  geom_histogram(fill = "darkblue") +
+  facet_wrap(~covariate, scales = "free_x")
+ggsave("Outputs/covariate_hists.png", width = 8, height = 6)
+
+
+ggplot(station_sp_cov_long, aes(x = value, fill = grid_id)) + 
+  geom_density(alpha = 0.4) +
+  facet_wrap(~covariate, scales = "free")
+
+write.csv(station_sp_cov, file = "Outputs/station_spatial_covariates.csv")
 
 
 ##### Seasonal range disturbance summary #####
