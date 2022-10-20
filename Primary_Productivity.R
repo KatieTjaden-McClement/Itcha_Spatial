@@ -6,6 +6,7 @@ library(sf)
 library(leaflet)
 library(raster)
 library(MODISTools)
+library(rgdal)
 library(lubridate)
 
 # load station data for reference 
@@ -593,7 +594,7 @@ get_july_evi_rast_ii_range <- function(dates){
   ii_evi_left_raster <- mt_to_raster(itcha_evi_left, 
                                      reproject = T)
   ii_evi_left_raster <- projectRaster(ii_evi_left_raster, 
-                                      crs = crs(aoi.utm))
+                                      crs = crs(II_ranges))
   
   itcha_evi_right <- mt_subset(product = "MOD13Q1",
                                lat = aoi_centre[2] + 0.2,
@@ -609,7 +610,7 @@ get_july_evi_rast_ii_range <- function(dates){
   ii_evi_right_raster <- mt_to_raster(itcha_evi_right, 
                                       reproject = T)
   ii_evi_right_raster <- projectRaster(ii_evi_right_raster, 
-                                       crs = crs(aoi.utm))
+                                       crs = crs(II_ranges))
   
   template <- projectRaster(from = ii_evi_left_raster,
                             to = ii_evi_right_raster,
@@ -625,7 +626,9 @@ get_july_evi_rast_ii_range <- function(dates){
 test <- get_july_evi_rast_ii_range(dates = jul_dates[1])
 plot(test)
 
-ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_july_evi_rast_ii_range)
+ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_july_evi_rast_ii_range) # started 9:30 Sept. 19
+save(ii_range_jul_evi_all, file = "ii_range_evi_all.RData")
+
 names(ii_range_jul_evi_all) <- jul_dates
 
 test_rasterstack <- do.call(stack, test2)
