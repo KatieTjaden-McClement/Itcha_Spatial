@@ -362,7 +362,7 @@ cutblock1_2003 <- cutblock1_2003 %>%
 fun_test <- extract_jul_evi(dist_shp = cutblock1_2003)
 # can add harvest year/other attributes back in based on id column after
 
-# keep only cutblock actually in the I-I caribou range:
+# keep only cutblocks actually in the I-I caribou range:
 II_cut <- st_intersection(cut, II_ranges) # removes 7321 cutblocks
 plot(st_geometry(II_cut))
 summary(II_cut$AREA_HA)
@@ -588,12 +588,12 @@ get_july_evi_rast_ii_range <- function(dates){
                               km_lr = 100, 
                               km_ab = 100,
                               internal = TRUE)
-  itcha_evi_left <- filter(itcha_evi_left, value >= -2000)
+  # itcha_evi_left <- filter(itcha_evi_left, value >= -2000)
   
   ii_evi_left_raster <- mt_to_raster(itcha_evi_left, 
-                                     reproject = T)
-  ii_evi_left_raster <- projectRaster(ii_evi_left_raster, 
-                                      crs = crs(aoi.utm))
+                                     reproject = F)
+  # ii_evi_left_raster <- projectRaster(ii_evi_left_raster, 
+  #                                     crs = crs(aoi.utm))
   
   itcha_evi_right <- mt_subset(product = "MOD13Q1",
                                lat = aoi_centre[2] + 0.2,
@@ -604,28 +604,247 @@ get_july_evi_rast_ii_range <- function(dates){
                                km_lr = 100, 
                                km_ab = 100,
                                internal = TRUE)
-  itcha_evi_right <- filter(itcha_evi_right, value >= -2000)
+  #itcha_evi_right <- filter(itcha_evi_right, value >= -2000)
   
   ii_evi_right_raster <- mt_to_raster(itcha_evi_right, 
-                                      reproject = T)
-  ii_evi_right_raster <- projectRaster(ii_evi_right_raster, 
-                                       crs = crs(aoi.utm))
+                                      reproject = F)
+  # ii_evi_right_raster <- projectRaster(ii_evi_right_raster, 
+  #                                      crs = crs(aoi.utm))
   
-  template <- projectRaster(from = ii_evi_left_raster,
-                            to = ii_evi_right_raster,
-                            alignOnly = TRUE)
+  # template <- projectRaster(from = ii_evi_left_raster,
+  #                           to = ii_evi_right_raster,
+  #                           alignOnly = TRUE)
+  # 
+  # ii_evi_left_raster_aligned <- projectRaster(from = ii_evi_left_raster, 
+  #                                             to = template)
   
-  ii_evi_left_raster_aligned <- projectRaster(from = ii_evi_left_raster, 
-                                              to = template)
   ii_evi_merged <- raster::merge(ii_evi_right_raster, 
-                                 ii_evi_left_raster_aligned)
-  ii_evi_mask <- mask(ii_evi_merged, st_zm(II_ranges))
+                                 ii_evi_left_raster)
+  
+  ii_evi_utm <- projectRaster(ii_evi_merged, 
+                              crs = crs(aoi.utm))
+  
+  ii_evi_mask <- mask(ii_evi_utm, st_zm(II_ranges))
 }
 
-test <- get_july_evi_rast_ii_range(dates = jul_dates[1])
+test <- get_july_evi_rast_ii_range(dates = jul_dates[1]) #start 3pm
 plot(test)
 
 ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_july_evi_rast_ii_range)
 names(ii_range_jul_evi_all) <- jul_dates
 
 test_rasterstack <- do.call(stack, test2)
+
+#save(II_ranges, aoi_centre, aoi.wgs, file = "ii_ranges_evi_files.RData")
+
+##### Extracting July EVI across II cutblocks #####
+
+# unprocessed list output of get_july_evi_rast_ii_range function lapply loop
+load("ii_range_evi_all.RData")
+head(ii_range_jul_evi_all)
+
+plot(ii_range_jul_evi_all[[14]])
+
+#convert list to rasterStack
+ii_range_jul_evi_all_stack <- stack(ii_range_jul_evi_all)
+head(ii_range_jul_evi_all_stack)
+plot(ii_range_jul_evi_all_stack)
+
+# need to average july evi rasters for each year 
+# use a group id for each year from jul_dates then average within groups
+merge_within_year_groups <- as_tibble(jul_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  group_by(year, month) %>% 
+  mutate(group = cur_group_id())
+
+ii_range_jul_evi <- stackApply(ii_range_jul_evi_all_stack, 
+                               indices = merge_within_year_groups$group,
+                               fun = mean) # returns rasterBrick object
+plot(ii_range_jul_evi$index_1)
+
+plot(st_geometry(II_ranges))
+plot(ii_range_jul_evi$index_1, add = T)
+
+# plot 2000 and 2022 July EVI in the II range for the TWS poster
+ii_park <- filter(II_ranges, BCHab_code == "HEWSR")
+
+png("evi_raster_2000.png")
+plot(ii_range_jul_evi$index_1, ext = extent(II_ranges),
+     axes = F, box = F)
+plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
+dev.off()
+
+
+png("evi_raster_2021.png")
+plot(ii_range_jul_evi$index_22, ext = extent(II_ranges),
+     axes = F, box = F)
+plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
+dev.off()
+
+plot(ii_range_jul_evi$index_23, ext = extent(II_ranges),
+     axes = F, box = F)
+
+# extract average yearly evi across cutblocks of different ages
+
+
+# keep only cutblocks actually in the I-I caribou range:
+ii_cut <- st_intersection(cut, II_ranges)
+
+# extracting evi values across years for one cutblock:
+ii_cut1 <- slice(ii_cut, 1)
+
+plot(ii_range_jul_evi$index_1)
+plot(st_geometry(ii_cut1), add = T)
+
+cut1_yearly_evi <- raster::extract(ii_range_jul_evi,
+                             st_zm(ii_cut1), method = "bilinear",
+                             fun = mean)
+cut1_yearly_evi <- cut1_yearly_evi[,]
+
+cut1_yearly_evi <- cut1_yearly_evi %>% 
+  as_tibble() %>% 
+  rename(july_evi = value) %>% 
+  mutate(cutblock_id = ii_cut1$VEG_CONSOLIDATED_CUT_BLOCK_ID,
+         year = c(2000:2022),
+         year_since_cut = year - unique(ii_cut1$HARVEST_YEAR))
+
+ggplot(cut1_yearly_evi, aes(x = year_since_cut, y = july_evi)) +
+  geom_point() # +
+  # geom_smooth()
+
+# make above into function:
+extract_yearly_evi_cutblocks <- function(cutblocks #list of cutblock polygons
+                                         ){
+  cut_yearly_evi <- raster::extract(ii_range_jul_evi,
+                                    st_zm(cutblocks), method = "bilinear",
+                                    fun = mean)
+  cut_yearly_evi <- cut_yearly_evi[,]
+  
+  cut_yearly_evi <- cut_yearly_evi %>% 
+    as_tibble() %>% 
+    rename(july_evi = value) %>% 
+    mutate(cutblock_id = cutblocks$VEG_CONSOLIDATED_CUT_BLOCK_ID,
+           year = c(2000:2022),
+           year_since_cut = year - unique(cutblocks$HARVEST_YEAR))
+  
+  }
+
+# put into lapply to output listm can then rbind into full long data frame
+
+# test with list of first 10 cutblocks
+cut_1_10_list <- slice_head(ii_cut, n = 10) 
+cut_1_10_list <- split(cut_1_10_list, seq(nrow(cut_1_10_list)))
+
+extract_yearly_evi_cutblocks_test <- lapply(cut_1_10_list, 
+                                            FUN = extract_yearly_evi_cutblocks)
+extract_yearly_evi_cutblocks_test <- do.call("rbind", extract_yearly_evi_cutblocks_test)
+
+ggplot(extract_yearly_evi_cutblocks_test, aes(x = year_since_cut,
+                                              y = july_evi)) +
+  geom_point(aes(colour = as.character(cutblock_id))) +
+  geom_smooth(aes(colour = as.character(cutblock_id)), se = F)
+
+# lapply across all cutblocks
+ii_cut_list <- split(ii_cut, seq(nrow(ii_cut)))
+
+ii_cut_yearly_evi <- lapply(ii_cut_list, 
+                            FUN = extract_yearly_evi_cutblocks)
+ii_cut_yearly_evi_df <- do.call("rbind", ii_cut_yearly_evi)
+
+ggplot(ii_cut_yearly_evi_df, aes(x = year_since_cut,
+                                 y = july_evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest harvest",
+       y = "Mean July EVI")
+
+
+##### Extracting July EVI across II burnt areas #####
+
+fire_all <- st_read(dsn = "Spatial_Layers/FIRE_POLYS_ranges.gdb")
+fire_all <- st_transform(fire_all, crs = crs(aoi.utm))
+
+ii_fire <- st_intersection(fire_all, II_ranges)
+head(ii_fire)
+
+extract_yearly_evi_fires <- function(fires #list of fire polygons
+){
+  fire_yearly_evi <- raster::extract(ii_range_jul_evi,
+                                    st_zm(fires), method = "bilinear",
+                                    fun = mean)
+  fire_yearly_evi <- fire_yearly_evi[,]
+  
+  fire_yearly_evi <- fire_yearly_evi %>% 
+    as_tibble() %>% 
+    rename(july_evi = value) %>% 
+    mutate(fire_id = fires$FIRE_LABEL,
+           year = c(2000:2022),
+           year_since_fire = year - unique(fires$FIRE_YEAR))
+}
+
+ii_fire_list <- split(ii_fire, seq(nrow(ii_fire)))
+
+ii_fire_yearly_evi <- lapply(ii_fire_list, 
+                             FUN = extract_yearly_evi_fires)
+ii_fire_yearly_evi_df <- do.call("rbind", ii_fire_yearly_evi)
+
+ggplot(ii_fire_yearly_evi_df, aes(x = year_since_fire,
+                                 y = july_evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since fire",
+       y = "Mean July EVI")
+
+### See how intact forest compares to burnt and cut areas in EVI over time
+
+# masking out cut and burnt areas from evi rasterstack
+not_burnt <- mask(ii_range_jul_evi, st_zm(ii_fire), inverse = T)
+plot(not_burnt_test$index_1) #looks good!
+
+ii_intact <- mask(not_burnt, st_zm(ii_cut), inverse = T)
+plot(ii_intact$index_1) #looks good!
+
+intact_mean_yearly_evi <- data.frame(mean_jul_evi = cellStats(ii_intact, "mean")) 
+intact_mean_yearly_evi$year <- c(2000:2022)
+
+ggplot(intact_mean_yearly_evi, aes(x = year, y = mean_jul_evi)) +
+  geom_point()
+
+# something going wrong with methods and recentering everything to year since cut?
+# plot all 2001 cutblocks in from 2000-2022
+
+ii_cut_2003_ids <- ii_cut %>% 
+  filter(HARVEST_YEAR == 2003) %>% 
+  pull(VEG_CONSOLIDATED_CUT_BLOCK_ID)
+
+ii_cut_2003 <- ii_cut %>% 
+  filter(HARVEST_YEAR == 2003)
+
+plot(st_geometry(ii_cut_2003))
+
+ii_cut_2003_evi <- filter(ii_cut_yearly_evi_df, 
+                          cutblock_id %in% ii_cut_2003_ids)
+
+ggplot(ii_cut_2003_evi, aes(x = year_since_cut, y = july_evi)) +
+  geom_point() +
+  geom_smooth()
+
+# look at EVI relative to evi pre-cut instead of raw evi
+
+
+
+# snapshot of EVi in different aged cutblocks in a 2020 rather than longitudinal
+
+ii_cutblock_evi_in_2022 <- filter(ii_cut_yearly_evi_df, year == 2022)
+
+ggplot(ii_cutblock_evi_in_2022, aes(x = year_since_cut, y = july_evi)) +
+  geom_point(size = 0.2, alpha = 0.2) +
+  geom_smooth() +
+  labs(y = "July 2022 EVI", x = "Cutblock age (years)")
+
+
+## try masking out areas burnt in the last 40 years...
+
+
+
