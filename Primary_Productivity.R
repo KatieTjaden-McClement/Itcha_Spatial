@@ -8,6 +8,8 @@ library(raster)
 library(MODISTools)
 library(lubridate)
 
+theme_set(theme_classic())
+
 # load station data for reference 
 sta <- as_tibble(read.csv("stations.csv", header=T))
 sta.wgs <- st_as_sf(sta, coords = c("longitude", "latitude"), crs=4326)
@@ -35,106 +37,105 @@ plot(st_geometry(sta.utm), add = T)
 
 aoi.wgs <- st_bbox(st_transform(aoi, 4326))
 
-# trying out different packages for accessing daily-scale NDVI/EVI from Landsat
-# MODIS 16-day coverage is too coarse and is missing entries
-
-### rLandsat package
-#devtools::install_github("atlanhq/rLandsat")
-library(rLandsat)
-
-# see what Landsat 8 products are available
-landsat_search(min_date = "2017-09-01", max_date = "2019-09-01",
-               country = "Canada")
-
-### getSpatialData package
-# https://rpubs.com/ials2un/getlandsat
-
-#devtools::install_github("16EAGLE/getSpatialData")
-library(getSpatialData)
-
-set_aoi(st_geometry(aoi)) # sets aoi for session
-view_aoi()
-
-login_USGS(username = "katietm")
-
-get_products()
-evi_records <- getMODIS_records(time_range = c("2000-09-01", "2022-08-22"),
-                                products = "modis_mod13q1_v6")
-head(evi_records)
-#view_records(evi_records)
-
-plot(st_geometry(evi_records[466,]))
-plot(st_geometry(sta.wgs), add = T)
-
-itcha_evi_records_july <- evi_records %>% 
-  mutate(month = month(start_time, label = T, abbr = T)) %>% 
-  filter(month == "Jul")
-
-#order_data(records = itcha_evi_records_july, wait_to_complete = T)
-check_availability(itcha_evi_records_july)
-
-set_archive(dir_archive = "MODIS_Data")
-
-login_earthdata(username = "katietm")
-services()
-
-evi_files <- getMODIS_data(records = itcha_evi_records_july)
-
-evi_files_test <- raster("MODIS_Data_datasets/modis_mod13q1_v6")
-# files are in .hdr format, need to convert to geotiff
-
-#devtools:::install_github("gearslaboratory/gdalUtils")
-library(gdalUtils)
-
-gdalinfo("MODIS_Data_datasets/modis_mod13q1_v6/MOD13Q1.A2001193.h10v03.006.2015143124411.hdf")
-
-install.packages("terra")
-library(terra)
-
-hds_test <- terra::rast("MODIS_Data_datasets/modis_mod13q1_v6/MOD13Q1.A2001193.h10v03.006.2015143124411.hdf")
-
-#unzip downloaded file
-untar("Landsat_Data_datasets/landsat_8_c1/LC08_L1TP_049023_20210425_20210501_01_T1_LEVEL_sr_evi.tar.gz")
-
-#read in evi data for 2021_04_25
-evi_2021_04_25 <- raster("Landsat_Data/LC08_L1TP_049023_20210425_20210501_01_T1_sr_evi.tif")
-evi_2021_04_25
-plot(evi_2021_04_25)
-
-# crop to aoi
-crs(aoi)
-
-evi_2021_04_25_cropped <- crop(evi_2021_04_25, aoi)
-plot(evi_2021_04_25_cropped)
-plot(st_geometry(sta.utm), add = T)
-
-# crop to satah grid to plot - entire raster is too large
-satah <- filter(sta.utm, grepl("ITCHA6", station_id))
-satah_aoi <- st_buffer(satah, 2000)
-
-evi_2021_04_25_satah <- crop(evi_2021_04_25, satah_aoi)
-plot(evi_2021_04_25_satah)
-plot(st_geometry(satah), add = T)
-
-normalize <- function(x) {
-  min <- raster::minValue(x)
-  max <- raster::maxValue(x)
-  return(255* (x - min) / (max - min))
-}
-evi_2021_04_25_satah <- normalize(evi_2021_04_25_satah)
-
-pal <- colorNumeric(c("red", "orange", "yellow", "green", "darkgreen"), 
-                    values(evi_2021_04_25_satah),
-                    na.color = "transparent")
-
-leaflet() %>% addTiles() %>% 
-  addRasterImage(evi_2021_04_25_satah, opacity = 0.7,
-                 colors = pal) %>% 
-  addLegend(pal = pal, 
-            values = values(evi_2021_04_25_satah))
-
-# landsat has much finer spatial resolution (30m), 
-# but coarser temporal resolution compared to MODIS - MODIS is better for what I'm trying to do
+# # trying out different packages for accessing daily-scale NDVI/EVI from Landsat
+# 
+# ### rLandsat package
+# #devtools::install_github("atlanhq/rLandsat")
+# library(rLandsat)
+# 
+# # see what Landsat 8 products are available
+# landsat_search(min_date = "2017-09-01", max_date = "2019-09-01",
+#                country = "Canada")
+# 
+# ### getSpatialData package
+# # https://rpubs.com/ials2un/getlandsat
+# 
+# #devtools::install_github("16EAGLE/getSpatialData")
+# library(getSpatialData)
+# 
+# set_aoi(st_geometry(aoi)) # sets aoi for session
+# view_aoi()
+# 
+# login_USGS(username = "katietm")
+# 
+# get_products()
+# evi_records <- getMODIS_records(time_range = c("2000-09-01", "2022-08-22"),
+#                                 products = "modis_mod13q1_v6")
+# head(evi_records)
+# #view_records(evi_records)
+# 
+# plot(st_geometry(evi_records[466,]))
+# plot(st_geometry(sta.wgs), add = T)
+# 
+# itcha_evi_records_july <- evi_records %>% 
+#   mutate(month = month(start_time, label = T, abbr = T)) %>% 
+#   filter(month == "Jul")
+# 
+# #order_data(records = itcha_evi_records_july, wait_to_complete = T)
+# check_availability(itcha_evi_records_july)
+# 
+# set_archive(dir_archive = "MODIS_Data")
+# 
+# login_earthdata(username = "katietm")
+# services()
+# 
+# evi_files <- getMODIS_data(records = itcha_evi_records_july)
+# 
+# evi_files_test <- raster("MODIS_Data_datasets/modis_mod13q1_v6")
+# # files are in .hdr format, need to convert to geotiff
+# 
+# #devtools:::install_github("gearslaboratory/gdalUtils")
+# library(gdalUtils)
+# 
+# gdalinfo("MODIS_Data_datasets/modis_mod13q1_v6/MOD13Q1.A2001193.h10v03.006.2015143124411.hdf")
+# 
+# install.packages("terra")
+# library(terra)
+# 
+# hds_test <- terra::rast("MODIS_Data_datasets/modis_mod13q1_v6/MOD13Q1.A2001193.h10v03.006.2015143124411.hdf")
+# 
+# #unzip downloaded file
+# untar("Landsat_Data_datasets/landsat_8_c1/LC08_L1TP_049023_20210425_20210501_01_T1_LEVEL_sr_evi.tar.gz")
+# 
+# #read in evi data for 2021_04_25
+# evi_2021_04_25 <- raster("Landsat_Data/LC08_L1TP_049023_20210425_20210501_01_T1_sr_evi.tif")
+# evi_2021_04_25
+# plot(evi_2021_04_25)
+# 
+# # crop to aoi
+# crs(aoi)
+# 
+# evi_2021_04_25_cropped <- crop(evi_2021_04_25, aoi)
+# plot(evi_2021_04_25_cropped)
+# plot(st_geometry(sta.utm), add = T)
+# 
+# # crop to satah grid to plot - entire raster is too large
+# satah <- filter(sta.utm, grepl("ITCHA6", station_id))
+# satah_aoi <- st_buffer(satah, 2000)
+# 
+# evi_2021_04_25_satah <- crop(evi_2021_04_25, satah_aoi)
+# plot(evi_2021_04_25_satah)
+# plot(st_geometry(satah), add = T)
+# 
+# normalize <- function(x) {
+#   min <- raster::minValue(x)
+#   max <- raster::maxValue(x)
+#   return(255* (x - min) / (max - min))
+# }
+# evi_2021_04_25_satah <- normalize(evi_2021_04_25_satah)
+# 
+# pal <- colorNumeric(c("red", "orange", "yellow", "green", "darkgreen"), 
+#                     values(evi_2021_04_25_satah),
+#                     na.color = "transparent")
+# 
+# leaflet() %>% addTiles() %>% 
+#   addRasterImage(evi_2021_04_25_satah, opacity = 0.7,
+#                  colors = pal) %>% 
+#   addLegend(pal = pal, 
+#             values = values(evi_2021_04_25_satah))
+# 
+# # landsat has much finer spatial resolution (30m), 
+# # but coarser temporal resolution compared to MODIS - MODIS is better for what I'm trying to do
 
 # look at evi over time for a specific cutblock
 cut <- st_read(dsn = "Spatial_Layers/CUT_BLOCKS_ranges.gdb")
@@ -578,7 +579,7 @@ head(jul_dates) #45 July dates
 head(jul_dates$calendar_date, 1)
 tail(jul_dates$calendar_date, 1)
 
-get_july_evi_rast_ii_range <- function(dates){
+get_evi_rast_ii_range <- function(dates){
   itcha_evi_left <- mt_subset(product = "MOD13Q1",
                               lat = aoi_centre[2] - 0.2,
                               lon = st_bbox(aoi.wgs)[1] + 0.5, # xmin
@@ -588,12 +589,8 @@ get_july_evi_rast_ii_range <- function(dates){
                               km_lr = 100, 
                               km_ab = 100,
                               internal = TRUE)
-  # itcha_evi_left <- filter(itcha_evi_left, value >= -2000)
-  
   ii_evi_left_raster <- mt_to_raster(itcha_evi_left, 
                                      reproject = F)
-  # ii_evi_left_raster <- projectRaster(ii_evi_left_raster, 
-  #                                     crs = crs(aoi.utm))
   
   itcha_evi_right <- mt_subset(product = "MOD13Q1",
                                lat = aoi_centre[2] + 0.2,
@@ -604,46 +601,38 @@ get_july_evi_rast_ii_range <- function(dates){
                                km_lr = 100, 
                                km_ab = 100,
                                internal = TRUE)
-  #itcha_evi_right <- filter(itcha_evi_right, value >= -2000)
-  
   ii_evi_right_raster <- mt_to_raster(itcha_evi_right, 
                                       reproject = F)
-  # ii_evi_right_raster <- projectRaster(ii_evi_right_raster, 
-  #                                      crs = crs(aoi.utm))
-  
-  # template <- projectRaster(from = ii_evi_left_raster,
-  #                           to = ii_evi_right_raster,
-  #                           alignOnly = TRUE)
-  # 
-  # ii_evi_left_raster_aligned <- projectRaster(from = ii_evi_left_raster, 
-  #                                             to = template)
   
   ii_evi_merged <- raster::merge(ii_evi_right_raster, 
                                  ii_evi_left_raster)
   
   ii_evi_utm <- projectRaster(ii_evi_merged, 
-                              crs = crs(aoi.utm))
+                              crs = crs(II_ranges))
   
   ii_evi_mask <- mask(ii_evi_utm, st_zm(II_ranges))
 }
 
-test <- get_july_evi_rast_ii_range(dates = jul_dates[1]) #start 3pm
+test <- get_evi_rast_ii_range(dates = jul_dates[1]) #start 3pm, finish 3:45
 plot(test)
 
-ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_july_evi_rast_ii_range)
-names(ii_range_jul_evi_all) <- jul_dates
+ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_evi_rast_ii_range)
+load("ii_range_jul_evi_all.RData")
 
-test_rasterstack <- do.call(stack, test2)
+plot(ii_range_jul_evi_all[[12]]) #looks good!
+crs(ii_range_jul_evi_all[[1]]) #all good!
+
+names(ii_range_jul_evi_all) <- jul_dates
 
 #save(II_ranges, aoi_centre, aoi.wgs, file = "ii_ranges_evi_files.RData")
 
 ##### Extracting July EVI across II cutblocks #####
 
 # unprocessed list output of get_july_evi_rast_ii_range function lapply loop
-load("ii_range_evi_all.RData")
+#load("ii_range_jul_evi_all.RData")
 head(ii_range_jul_evi_all)
 
-plot(ii_range_jul_evi_all[[14]])
+plot(ii_range_jul_evi_all[[1]])
 
 #convert list to rasterStack
 ii_range_jul_evi_all_stack <- stack(ii_range_jul_evi_all)
@@ -667,26 +656,27 @@ plot(st_geometry(II_ranges))
 plot(ii_range_jul_evi$index_1, add = T)
 
 # plot 2000 and 2022 July EVI in the II range for the TWS poster
-ii_park <- filter(II_ranges, BCHab_code == "HEWSR")
-
-png("evi_raster_2000.png")
-plot(ii_range_jul_evi$index_1, ext = extent(II_ranges),
-     axes = F, box = F)
-plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
-dev.off()
-
-
-png("evi_raster_2021.png")
-plot(ii_range_jul_evi$index_22, ext = extent(II_ranges),
-     axes = F, box = F)
-plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
-dev.off()
-
-plot(ii_range_jul_evi$index_23, ext = extent(II_ranges),
-     axes = F, box = F)
+# ii_park <- filter(II_ranges, BCHab_code == "HEWSR")
+# 
+# png("evi_raster_2000.png")
+# plot(ii_range_jul_evi$index_1, ext = extent(II_ranges),
+#      axes = F, box = F)
+# plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
+# dev.off()
+# 
+# 
+# png("evi_raster_2021.png")
+# plot(ii_range_jul_evi$index_22, ext = extent(II_ranges),
+#      axes = F, box = F)
+# plot(st_geometry(sta.utm), add = T, pch = 19, cex = 0.15)
+# dev.off()
+# 
+# plot(ii_range_jul_evi$index_23, ext = extent(II_ranges),
+#      axes = F, box = F)
 
 # extract average yearly evi across cutblocks of different ages
-
+cut <- st_read(dsn = "Spatial_Layers/CUT_BLOCKS_ranges.gdb")
+cut <- st_transform(cut, crs = crs(aoi.utm))
 
 # keep only cutblocks actually in the I-I caribou range:
 ii_cut <- st_intersection(cut, II_ranges)
@@ -714,9 +704,9 @@ ggplot(cut1_yearly_evi, aes(x = year_since_cut, y = july_evi)) +
   # geom_smooth()
 
 # make above into function:
-extract_yearly_evi_cutblocks <- function(cutblocks #list of cutblock polygons
-                                         ){
-  cut_yearly_evi <- raster::extract(ii_range_jul_evi,
+extract_yearly_evi_cutblocks <- function(cutblocks, #list of cutblock polygons
+                                         evi_raster){
+  cut_yearly_evi <- raster::extract(evi_raster,
                                     st_zm(cutblocks), method = "bilinear",
                                     fun = mean)
   cut_yearly_evi <- cut_yearly_evi[,]
@@ -736,7 +726,7 @@ extract_yearly_evi_cutblocks <- function(cutblocks #list of cutblock polygons
 cut_1_10_list <- slice_head(ii_cut, n = 10) 
 cut_1_10_list <- split(cut_1_10_list, seq(nrow(cut_1_10_list)))
 
-extract_yearly_evi_cutblocks_test <- lapply(cut_1_10_list, 
+extract_yearly_evi_cutblocks_test <- lapply(cut_1_10_list, ii_range_jul_evi,
                                             FUN = extract_yearly_evi_cutblocks)
 extract_yearly_evi_cutblocks_test <- do.call("rbind", extract_yearly_evi_cutblocks_test)
 
@@ -748,7 +738,7 @@ ggplot(extract_yearly_evi_cutblocks_test, aes(x = year_since_cut,
 # lapply across all cutblocks
 ii_cut_list <- split(ii_cut, seq(nrow(ii_cut)))
 
-ii_cut_yearly_evi <- lapply(ii_cut_list, 
+ii_cut_yearly_evi <- lapply(ii_cut_list, ii_range_jul_evi,
                             FUN = extract_yearly_evi_cutblocks)
 ii_cut_yearly_evi_df <- do.call("rbind", ii_cut_yearly_evi)
 
@@ -800,7 +790,7 @@ ggplot(ii_fire_yearly_evi_df, aes(x = year_since_fire,
 
 # masking out cut and burnt areas from evi rasterstack
 not_burnt <- mask(ii_range_jul_evi, st_zm(ii_fire), inverse = T)
-plot(not_burnt_test$index_1) #looks good!
+plot(not_burnt$index_1) #looks good!
 
 ii_intact <- mask(not_burnt, st_zm(ii_cut), inverse = T)
 plot(ii_intact$index_1) #looks good!
@@ -814,27 +804,23 @@ ggplot(intact_mean_yearly_evi, aes(x = year, y = mean_jul_evi)) +
 # something going wrong with methods and recentering everything to year since cut?
 # plot all 2001 cutblocks in from 2000-2022
 
-ii_cut_2003_ids <- ii_cut %>% 
-  filter(HARVEST_YEAR == 2003) %>% 
+ii_cut_2002_ids <- ii_cut %>% 
+  filter(HARVEST_YEAR == 2002) %>% 
   pull(VEG_CONSOLIDATED_CUT_BLOCK_ID)
 
-ii_cut_2003 <- ii_cut %>% 
-  filter(HARVEST_YEAR == 2003)
+ii_cut_2002 <- ii_cut %>% 
+  filter(HARVEST_YEAR == 2002)
 
-plot(st_geometry(ii_cut_2003))
+plot(st_geometry(ii_cut_2002))
 
-ii_cut_2003_evi <- filter(ii_cut_yearly_evi_df, 
-                          cutblock_id %in% ii_cut_2003_ids)
+ii_cut_2002_evi <- filter(ii_cut_yearly_evi_df, 
+                          cutblock_id %in% ii_cut_2002_ids)
 
-ggplot(ii_cut_2003_evi, aes(x = year_since_cut, y = july_evi)) +
+ggplot(ii_cut_2002_evi, aes(x = year_since_cut, y = july_evi)) +
   geom_point() +
   geom_smooth()
 
-# look at EVI relative to evi pre-cut instead of raw evi
-
-
-
-# snapshot of EVi in different aged cutblocks in a 2020 rather than longitudinal
+# snapshot of EVI in different aged cutblocks in a 2020 rather than longitudinal
 
 ii_cutblock_evi_in_2022 <- filter(ii_cut_yearly_evi_df, year == 2022)
 
@@ -847,4 +833,48 @@ ggplot(ii_cutblock_evi_in_2022, aes(x = year_since_cut, y = july_evi)) +
 ## try masking out areas burnt in the last 40 years...
 
 
+## try taking only the July 27/28 EVI raster for each year like Gagne 2016
+jul_dates
 
+# need to average july evi rasters for each year 
+# use a group id for each year from jul_dates then average within groups
+keep_second_year_groups <- as_tibble(jul_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  group_by(year, month) %>% 
+  mutate(group = cur_group_id()) %>% 
+  slice_tail(n = 1) %>% 
+  pull(value)
+
+ii_endJul_evi <- ii_range_jul_evi_all[keep_second_year_groups]
+ii_endJul_evi <- stack(ii_endJul_evi)
+
+plot(ii_endJul_evi$X2018.07.28)
+
+ii_cut_yearly_endJul_evi <- lapply(ii_cut_list, ii_endJul_evi,
+                                   FUN = extract_yearly_evi_cutblocks)
+ii_cut_yearly_endJul_evi_df <- do.call("rbind", ii_cut_yearly_endJul_evi)
+
+ggplot(ii_cut_yearly_endJul_evi_df, aes(x = year_since_cut,
+                                        y = july_evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  geom_smooth(data = ii_cut_yearly_evi_df, colour = "red") +
+  ylim(c(0, 0.7)) +
+  labs(x = "Years since forest harvest",
+       y = "July 27/28 EVI")
+# using the last July evi vs. average july evi makes basically 
+# no difference to the average evi in cuts over the years
+
+# extract sept-beginning oct evi to get delta evi
+sep_oct_dates <- mt_dates(product = "MOD13Q1", lat = aoi_centre[2],
+                          lon = aoi_centre[1]) %>% 
+  mutate(month = month(ymd(calendar_date)),
+         year = year(ymd(calendar_date)),
+         month_day = format(as.Date(calendar_date), "%m-%d")) %>% 
+  filter(month %in% c(9,10),
+         month_day < "10-20") %>% 
+  pull(calendar_date)
+head(sep_oct_dates) #69 dates
+
+ii_range_fall_evi_all <- lapply(sept_oct_dates, FUN = get_evi_rast_ii_range)
