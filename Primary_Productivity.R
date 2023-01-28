@@ -878,3 +878,95 @@ sep_oct_dates <- mt_dates(product = "MOD13Q1", lat = aoi_centre[2],
 head(sep_oct_dates) #69 dates
 
 ii_range_fall_evi_all <- lapply(sept_oct_dates, FUN = get_evi_rast_ii_range)
+
+
+##### Other caribou ranges #####
+bc_caribou_ranges <- st_read("Spatial_Layers/BC_Caribou_Ranges/GCPB_CARIBOU_POPULATION_SP.gdb/")
+head(bc_caribou_ranges)
+
+plot(st_geometry(bc_caribou_ranges))
+
+#filter to southern group of southern mountain caribou
+sm_caribou_ranges <- filter(bc_caribou_ranges,
+                            HERD_NAME %in% c("Purcells South", "Purcell Central",
+                                             "South Selkirks", "Central Selkirks",
+                                             "Monashee", "Columbia South",
+                                             "Frisby Boulder", "Columbia North",
+                                             "Groundhog", "Central Rockies", "Wells Gray South",
+                                             "Wells Gray North", "Barkerville", "North Cariboo",
+                                             "Narrow Lake", "George Mountain", "Hart Ranges",
+                                             "Redrock-Prairie Creek"))
+plot(st_geometry(sm_caribou_ranges))
+
+# Start with purcells range - looks like most cutblocks and studied in kinley and Apps 2001
+purcells_range <- filter(bc_caribou_ranges,
+                         HERD_NAME %in% c("Purcells South", 
+                                          "Purcell Central")) %>% 
+  st_union() %>%  # merge south and central
+  st_transform(crs = 32611) #UTM Zone 11N
+
+plot(st_geometry(purcells_range))
+
+purcells_bbox <- purcells_range %>% 
+  st_buffer(1000)
+  
+purcells_bbox <- st_as_sfc(st_bbox(purcells_bbox))
+crs(purcells_range)
+
+plot(purcells_bbox)
+plot(st_geometry(purcells_range), add = T)
+#st_write(purcells_bbox, dsn = "purcells_bbox.shp")
+
+purc_aoi_centre <- st_geometry(st_centroid(purcells_range)) %>% 
+  st_transform(crs = crs(sta.wgs)) %>% 
+  unlist()
+
+purc_dates <- mt_dates(product = "MOD13Q1", lat = purc_aoi_centre[2],
+                                    lon = purc_aoi_centre[1]) %>% 
+  mutate(month = month(ymd(calendar_date)),
+         month_day = format(as.Date(calendar_date), "%m-%d")) %>% 
+  filter(month %in% c(7, 9, 10),
+         month_day < "10-20") %>% 
+  pull(calendar_date)
+
+#save(purc_aoi_centre, purcells_range, file = "purcells_aoi_and_range.RData")
+
+# write function for extracting evi
+get_evi_purcells_range <- function(dates){
+  evi_top <- mt_subset(product = "MOD13Q1",
+                       lat = purc_aoi_centre[2] + 0.4,
+                       lon = purc_aoi_centre[1] + 0.1, # xmin
+                       band = "250m_16_days_EVI",
+                       start = purc_dates[1],
+                       end = purc_dates[1],
+                       km_lr = 100, 
+                       km_ab = 100,
+                       internal = TRUE)
+  evi_top_raster <- mt_to_raster(evi_top, 
+                                 reproject = F)
+  
+  evi_bottom <- mt_subset(product = "MOD13Q1",
+                          lat = purc_aoi_centre[2] - 0.4,
+                          lon = purc_aoi_centre[1] - 0.15, # xmin
+                          band = "250m_16_days_EVI",
+                          start = purc_dates[1],
+                          end = purc_dates[1],
+                          km_lr = 70, 
+                          km_ab = 70,
+                          internal = TRUE)
+  evi_bottom_raster <- mt_to_raster(evi_bottom, 
+                                    reproject = F)
+  
+  evi_merged <- raster::merge(evi_top_raster, 
+                              evi_bottom_raster)
+  
+  evi_utm <- projectRaster(evi_merged, 
+                           crs = crs(purcells_range))
+  
+  ii_evi_mask <- mask(evi_utm, purcells_range)
+}
+
+purcells_range_evi_all <- lapply(purc_dates, FUN = get_evi_purcells_range)
+
+
+
