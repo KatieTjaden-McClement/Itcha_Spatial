@@ -1,6 +1,11 @@
 ## Exploring Primary Productivity within Itcha and across regions
 # Does the vegetation response following disturbance support DMAC?
 
+#mt_to_raster was replaced with mt_to_terra in version 1.1.4
+#need to download older verison
+
+devtools::install_version("MODISTools", "1.1.2")
+
 library(tidyverse)
 library(sf)
 library(leaflet)
@@ -923,13 +928,13 @@ purc_aoi_centre <- st_geometry(st_centroid(purcells_range)) %>%
 
 purc_dates <- mt_dates(product = "MOD13Q1", lat = purc_aoi_centre[2],
                                     lon = purc_aoi_centre[1]) %>% 
-  mutate(month = month(ymd(calendar_date)),
-         month_day = format(as.Date(calendar_date), "%m-%d")) %>% 
-  filter(month %in% c(7, 9, 10),
-         month_day < "10-20") %>% 
+  mutate(month = month(ymd(calendar_date))) %>% 
+  filter(month %in% c(7, 9)) %>% 
   pull(calendar_date)
 
 #save(purc_aoi_centre, purcells_range, file = "purcells_aoi_and_range.RData")
+plot(purcells_range)
+purcells_range_sf <- st_as_sf(purcells_range)
 
 # write function for extracting evi
 get_evi_purcells_range <- function(dates){
@@ -937,8 +942,8 @@ get_evi_purcells_range <- function(dates){
                        lat = purc_aoi_centre[2] + 0.4,
                        lon = purc_aoi_centre[1] + 0.1, # xmin
                        band = "250m_16_days_EVI",
-                       start = purc_dates[1],
-                       end = purc_dates[1],
+                       start = dates,
+                       end = dates,
                        km_lr = 100, 
                        km_ab = 100,
                        internal = TRUE)
@@ -949,8 +954,8 @@ get_evi_purcells_range <- function(dates){
                           lat = purc_aoi_centre[2] - 0.4,
                           lon = purc_aoi_centre[1] - 0.15, # xmin
                           band = "250m_16_days_EVI",
-                          start = purc_dates[1],
-                          end = purc_dates[1],
+                          start = dates,
+                          end = dates,
                           km_lr = 70, 
                           km_ab = 70,
                           internal = TRUE)
@@ -963,10 +968,11 @@ get_evi_purcells_range <- function(dates){
   evi_utm <- projectRaster(evi_merged, 
                            crs = crs(purcells_range))
   
-  ii_evi_mask <- mask(evi_utm, purcells_range)
+  ii_evi_mask <- raster::mask(evi_utm, purcells_range_sf)
 }
 
 purcells_range_evi_all <- lapply(purc_dates, FUN = get_evi_purcells_range)
+#started 5pm Jan 30
 
-
+save(purcells_range_evi_all, file = "purcells_range_evi_all.RData")
 
