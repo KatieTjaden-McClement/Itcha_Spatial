@@ -939,5 +939,88 @@ get_evi_purcells_range <- function(dates){
 purcells_range_evi_all <- lapply(purc_dates, FUN = get_evi_purcells_range)
 #started 5pm Jan 30
 
-save(purcells_range_evi_all, file = "purcells_range_evi_all.RData")
+#save(purcells_range_evi_all, file = "purcells_range_evi_all.RData")
+
+load("Spatial_Layers/Productivity_comparison/Purcells/purcells_range_evi_all.RData")
+plot(purcells_range_evi_all[[1]])
+
+names(purcells_range_evi_all) <- purc_dates
+
+purcells_evi_all_stack <- stack(purcells_range_evi_all)
+
+# filter to july dates, average within
+purc_jul_evi_all <- raster::subset(purcells_evi_all_stack,
+                                   grep('\\.07\\.', 
+                                        names(purcells_evi_all_stack), 
+                                        value = T))
+
+purc_jul_year_groups <- as_tibble(purc_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 7) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+purc_jul_evi <- stackApply(purc_jul_evi_all, 
+                           indices = purc_jul_year_groups$group,
+                           fun = mean)
+plot(purc_jul_evi$index_1)
+
+# filter to Sept dates, average within
+purc_sep_evi_all <- raster::subset(purcells_evi_all_stack,
+                                   grep('\\.09\\.', 
+                                        names(purcells_evi_all_stack), 
+                                        value = T))
+
+purc_sep_year_groups <- as_tibble(purc_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 9) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+purc_sep_evi <- stackApply(purc_sep_evi_all, 
+                           indices = purc_sep_year_groups$group,
+                           fun = mean)
+plot(purc_sep_evi$index_1)
+
+# Delta EVI
+purc_delta_evi <- purc_jul_evi - purc_sep_evi
+plot(purc_delta_evi$layer.1)
+
+### Extract Jul evi and delta evi across purcells cutblocks and fires
+purc_cut_all <- st_read("Spatial_Layers/Productivity_comparison/Purcells/Purcells_Cons_Cutblocks/VEG_CONSOLIDATED_CUT_BLOCKS_SP.gdb") %>% 
+  st_transform(crs = crs(purcells_range))
+plot(st_geometry(purc_cut_all)) # looks good
+plot(st_geometry(purcells_range), add = T)
+
+purc_cut <- st_intersection(purc_cut_all, purcells_range)
+# 7441 cutblocks
+plot(st_geometry(purc_cut))
+
+purc_cut_list <- split(purc_cut, seq(nrow(purc_cut)))
+
+purc_cut_yearly_jul_evi <- lapply(purc_cut_list, purc_jul_evi,
+                                  FUN = extract_yearly_evi_cutblocks)
+purc_cut_yearly_jul_evi_df <- do.call("rbind", purc_cut_yearly_jul_evi)
+
+ggplot(purc_cut_yearly_jul_evi_df, aes(x = year_since_cut,
+                                       y = july_evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest harvest",
+       y = "Mean July EVI")
+
+# compare trends in Itcha vs. Purcells
+ii_cut_yearly_evi_df$site <- "Itcha-Ilgachuz"
+purc_cut_yearly_jul_evi_df$site <- "Purcells"
+
+jul_evi_range_comp <- rbind(purc_cut_yearly_jul_evi_df,
+                            ii_cut_yearly_evi_df)
+
+ggplot(jul_evi_range_comp, aes(x = year_since_cut, y = july_evi,
+                               colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth()
+
 
