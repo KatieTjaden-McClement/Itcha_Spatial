@@ -673,7 +673,7 @@ plot(purc_sep_evi$index_1)
 purc_delta_evi <- purc_jul_evi - purc_sep_evi
 plot(purc_delta_evi$layer.1)
 
-### Extract Jul evi and delta evi across purcells cutblocks and fires
+### Extract Jul evi across purcells cutblocks and fires
 purc_cut_all <- st_read("Spatial_Layers/Productivity_comparison/Purcells/Purcells_Cons_Cutblocks/VEG_CONSOLIDATED_CUT_BLOCKS_SP.gdb") %>% 
   st_transform(crs = crs(purcells_range))
 # plot(st_geometry(purc_cut_all)) # looks good
@@ -780,5 +780,88 @@ ii_pruc_jul_evi_dist_comp_plot <- ggplot(all_jul_evi_comp, aes(x = year_since_di
 ggsave("Outputs/plots/ii_pruc_jul_evi_dist_comp_plot.jpg", 
        width = 8, height = 4)
 
+### Extract delta evi across purcells cutblocks and fires
 
+# cutblocks
+purc_cut_yearly_delta_evi <- lapply(purc_cut_list, purc_delta_evi, "delta_evi",
+                                  FUN = extract_yearly_evi_cutblocks)
+purc_cut_yearly_delta_evi_df <- do.call("rbind", purc_cut_yearly_delta_evi)
 
+ggplot(purc_cut_yearly_delta_evi_df, aes(x = year_since_cut,
+                                       y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest harvest",
+       y = "Delta EVI")
+
+ii_cut_yearly_delta_evi_df$site <- "Itcha-Ilgachuz"
+purc_cut_yearly_delta_evi_df$site <- "Purcells"
+
+cut_delta_evi_range_comp <- rbind(purc_cut_yearly_delta_evi_df,
+                                  ii_cut_yearly_delta_evi_df)
+
+ggplot(cut_delta_evi_range_comp, aes(x = year_since_cut, y = evi,
+                                   colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
+  labs(x = "Years since forest harvest",
+       y = "Delta EVI",
+       colour = "")
+
+# fires
+purc_fire_yearly_delta_evi <- lapply(purc_fire_list, purc_delta_evi, "delta_evi",
+                                    FUN = extract_yearly_evi_fires)
+purc_fire_yearly_delta_evi_df <- do.call("rbind", purc_fire_yearly_delta_evi)
+
+ggplot(purc_fire_yearly_delta_evi_df, aes(x = year_since_fire,
+                                         y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest fire",
+       y = "Delta EVI")
+
+ii_fire_yearly_delta_evi_df$site <- "Itcha-Ilgachuz"
+purc_fire_yearly_delta_evi_df$site <- "Purcells"
+
+fire_delta_evi_range_comp <- rbind(purc_fire_yearly_delta_evi_df,
+                                  ii_fire_yearly_delta_evi_df)
+
+ggplot(fire_delta_evi_range_comp, aes(x = year_since_fire, y = evi,
+                                     colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
+  labs(x = "Years since forest fire",
+       y = "Delta EVI",
+       colour = "")
+
+# combine and plot
+cut_delta_evi_range_comp_merge <- cut_delta_evi_range_comp %>% 
+  rename(dist_id = cutblock_id,
+         year_since_dist = year_since_cut) %>% 
+  mutate(dist_type = "Cutblock")
+
+fire_delta_evi_range_comp_merge <- fire_delta_evi_range_comp %>% 
+  rename(dist_id = fire_id,
+         year_since_dist = year_since_fire) %>% 
+  mutate(dist_type = "Fire")
+
+all_delta_evi_comp <- rbind(cut_delta_evi_range_comp_merge,
+                          fire_delta_evi_range_comp_merge)
+
+ii_pruc_delta_evi_dist_comp_plot <- ggplot(all_delta_evi_comp, aes(x = year_since_dist, y = evi,
+                                                               colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
+              fill = NA, color = "black") +
+  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
+  labs(x = "Years since disturbance",
+       y = "Delta EVI",
+       colour = "Caribou range") +
+  facet_wrap(~dist_type, scales = "free_x")
+
+ii_pruc_delta_evi_dist_comp_plot
+ggsave("Outputs/plots/ii_pruc_delta_evi_dist_comp_plot.jpg", 
+       width = 8, height = 4)
