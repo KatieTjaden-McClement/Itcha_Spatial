@@ -553,6 +553,7 @@ sm_caribou_ranges <- filter(bc_caribou_ranges,
                                              "Redrock-Prairie Creek"))
 plot(st_geometry(sm_caribou_ranges))
 
+##### Purcells #####
 # Start with purcells range - looks like most cutblocks and studied in kinley and Apps 2001
 purcells_range <- filter(bc_caribou_ranges,
                          HERD_NAME %in% c("Purcells South", 
@@ -865,3 +866,60 @@ ii_pruc_delta_evi_dist_comp_plot <- ggplot(all_delta_evi_comp, aes(x = year_sinc
 ii_pruc_delta_evi_dist_comp_plot
 ggsave("Outputs/plots/ii_pruc_delta_evi_dist_comp_plot.jpg", 
        width = 8, height = 4)
+
+##### Barkerville #####
+
+bv_range <- filter(bc_caribou_ranges,
+                   HERD_NAME == "Barkerville") %>%
+  st_transform(crs = 32610) #UTM zone 10N
+plot(st_geometry(bv_range))
+
+bv_bbox <- bv_range %>% 
+  st_buffer(1000)
+
+bv_bbox <- st_as_sfc(st_bbox(bv_bbox))
+crs(bv_range)
+
+plot(bv_bbox)
+plot(st_geometry(bv_range), add = T)
+#st_write(bv_bbox, dsn = "Spatial_Layers/Productivity_comparison/Barkerville/bv_bbox.shp")
+
+bv_aoi_centre <- st_geometry(st_centroid(bv_range)) %>% 
+  st_transform(crs = crs(sta.wgs)) %>% 
+  unlist()
+
+bv_dates <- mt_dates(product = "MOD13Q1", lat = bv_aoi_centre[2],
+                       lon = bv_aoi_centre[1]) %>% 
+  mutate(month = month(ymd(calendar_date))) %>% 
+  filter(month %in% c(7, 9)) %>% 
+  pull(calendar_date)
+
+# save(bv_aoi_centre, bv_range, file = "Spatial_Layers/Productivity_comparison/Barkerville/bv_aoi_and_range.RData")
+# plot(bv_range)
+# bv_range_sf <- st_as_sf(bv_range)
+
+# write function for extracting evi
+get_evi_bv_range <- function(dates){
+  evi <- mt_subset(product = "MOD13Q1",
+                       lat = bv_aoi_centre[2], 
+                       lon = bv_aoi_centre[1], # xmin
+                       band = "250m_16_days_EVI",
+                       start = bv_dates,
+                       end = bv_dates,
+                       km_lr = 100, 
+                       km_ab = 60,
+                       internal = TRUE)
+  evi_raster <- mt_to_raster(evi_top, 
+                                 reproject = F)
+  
+  evi_utm <- projectRaster(evi_raster, 
+                           crs = crs(bv_range))
+  
+  bv_evi_mask <- raster::mask(evi_utm, bv_range)
+}
+
+
+
+
+
+
