@@ -4,7 +4,7 @@
 #mt_to_raster was replaced with mt_to_terra in version 1.1.4
 #need to download older verison
 
-devtools::install_version("MODISTools", "1.1.2")
+#devtools::install_version("MODISTools", "1.1.2")
 
 library(tidyverse)
 library(sf)
@@ -12,8 +12,10 @@ library(leaflet)
 library(raster)
 library(MODISTools)
 library(rgdal)
+library(bcmaps)
 library(lubridate)
 library(NatParksPalettes)
+library(cowplot)
 
 theme_set(theme_classic())
 
@@ -167,14 +169,8 @@ get_evi_rast_ii_range <- function(dates){
                               km_lr = 100, 
                               km_ab = 100,
                               internal = TRUE)
-  ii_evi_left_raster <- mt_to_raster(itcha_evi_left, 
-<<<<<<< HEAD
-                                     reproject = T)
-  ii_evi_left_raster <- projectRaster(ii_evi_left_raster, 
-                                      crs = crs(II_ranges))
-=======
+  ii_evi_left_raster <- mt_to_raster(itcha_evi_left,
                                      reproject = F)
->>>>>>> dbda7120feb87df66523e1acca57c11b7453167f
   
   itcha_evi_right <- mt_subset(product = "MOD13Q1",
                                lat = aoi_centre[2] + 0.2,
@@ -186,13 +182,7 @@ get_evi_rast_ii_range <- function(dates){
                                km_ab = 100,
                                internal = TRUE)
   ii_evi_right_raster <- mt_to_raster(itcha_evi_right, 
-<<<<<<< HEAD
-                                      reproject = T)
-  ii_evi_right_raster <- projectRaster(ii_evi_right_raster, 
-                                       crs = crs(II_ranges))
-=======
                                       reproject = F)
->>>>>>> dbda7120feb87df66523e1acca57c11b7453167f
   
   ii_evi_merged <- raster::merge(ii_evi_right_raster, 
                                  ii_evi_left_raster)
@@ -715,23 +705,6 @@ ggplot(purc_cut_yearly_jul_evi_df, aes(x = year_since_cut,
   labs(x = "Years since forest harvest",
        y = "Mean July EVI")
 
-# compare trends in Itcha vs. Purcells
-ii_cut_yearly_evi_df$site <- "Itcha-Ilgachuz"
-purc_cut_yearly_jul_evi_df$site <- "Purcells"
-
-cut_jul_evi_range_comp <- rbind(purc_cut_yearly_jul_evi_df,
-                                ii_cut_yearly_evi_df)
-
-
-ggplot(cut_jul_evi_range_comp, aes(x = year_since_cut, y = evi,
-                               colour = site, group = site)) +
-  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
-  geom_smooth() +
-  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
-  labs(x = "Years since forest harvest",
-       y = "Mean July EVI",
-       colour = "")
-
 ## Fires
 purc_fire_all <- st_read("Spatial_Layers/Productivity_comparison/Purcells/Purcells_Fires/PROT_HISTORICAL_FIRE_POLYS_SP.gdb/") %>% 
   st_transform(crs = crs(purcells_range))
@@ -755,52 +728,7 @@ ggplot(purc_fire_yearly_jul_evi_df, aes(x = year_since_fire,
   labs(x = "Years since fire",
        y = "Mean July EVI")
 
-# merge with II and plot
-purc_fire_yearly_jul_evi_df$site <- "Purcells"
-ii_fire_yearly_evi_df$site <- "Itcha-Ilgachuz"
-
-fire_jul_evi_range_comp <- rbind(purc_fire_yearly_jul_evi_df,
-                                 ii_fire_yearly_evi_df)
-
-ggplot(fire_jul_evi_range_comp, aes(x = year_since_fire, y = evi,
-                                    colour = site, group = site)) +
-  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
-  geom_smooth() +
-  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
-  labs(x = "Years since forest fire",
-       y = "Mean July EVI",
-       colour = "")
-
-cut_jul_evi_range_comp_merge <- cut_jul_evi_range_comp %>% 
-  rename(dist_id = cutblock_id,
-         year_since_dist = year_since_cut) %>% 
-  mutate(dist_type = "Cutblock")
-
-fire_jul_evi_range_comp_merge <- fire_jul_evi_range_comp %>% 
-  rename(dist_id = fire_id,
-         year_since_dist = year_since_fire) %>% 
-  mutate(dist_type = "Fire")
-
-all_jul_evi_comp <- rbind(cut_jul_evi_range_comp_merge,
-                          fire_jul_evi_range_comp_merge)
-
-ii_pruc_jul_evi_dist_comp_plot <- ggplot(all_jul_evi_comp, aes(x = year_since_dist, y = evi,
-                                                               colour = site, group = site)) +
-  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
-  geom_smooth() +
-  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
-              fill = NA, color = "black") +
-  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
-  labs(x = "Years since disturbance",
-       y = "Mean July EVI",
-       colour = "Caribou range") +
-  facet_wrap(~dist_type, scales = "free_x")
-
-ggsave("Outputs/plots/ii_pruc_jul_evi_dist_comp_plot.jpg", 
-       width = 8, height = 4)
-
 ### Extract delta evi across purcells cutblocks and fires
-
 # cutblocks
 purc_cut_yearly_delta_evi <- lapply(purc_cut_list, purc_delta_evi, "delta_evi",
                                   FUN = extract_yearly_evi_cutblocks)
@@ -840,50 +768,6 @@ ggplot(purc_fire_yearly_delta_evi_df, aes(x = year_since_fire,
   labs(x = "Years since forest fire",
        y = "Delta EVI")
 
-ii_fire_yearly_delta_evi_df$site <- "Itcha-Ilgachuz"
-purc_fire_yearly_delta_evi_df$site <- "Purcells"
-
-fire_delta_evi_range_comp <- rbind(purc_fire_yearly_delta_evi_df,
-                                  ii_fire_yearly_delta_evi_df)
-
-ggplot(fire_delta_evi_range_comp, aes(x = year_since_fire, y = evi,
-                                     colour = site, group = site)) +
-  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
-  geom_smooth() +
-  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
-  labs(x = "Years since forest fire",
-       y = "Delta EVI",
-       colour = "")
-
-# combine and plot
-cut_delta_evi_range_comp_merge <- cut_delta_evi_range_comp %>% 
-  rename(dist_id = cutblock_id,
-         year_since_dist = year_since_cut) %>% 
-  mutate(dist_type = "Cutblock")
-
-fire_delta_evi_range_comp_merge <- fire_delta_evi_range_comp %>% 
-  rename(dist_id = fire_id,
-         year_since_dist = year_since_fire) %>% 
-  mutate(dist_type = "Fire")
-
-all_delta_evi_comp <- rbind(cut_delta_evi_range_comp_merge,
-                          fire_delta_evi_range_comp_merge)
-
-ii_pruc_delta_evi_dist_comp_plot <- ggplot(all_delta_evi_comp, aes(x = year_since_dist, y = evi,
-                                                               colour = site, group = site)) +
-  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
-  geom_smooth() +
-  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
-              fill = NA, color = "black") +
-  scale_color_manual(values = natparks.pals("Saguaro", 2)) +
-  labs(x = "Years since disturbance",
-       y = "Delta EVI",
-       colour = "Caribou range") +
-  facet_wrap(~dist_type, scales = "free_x")
-
-ii_pruc_delta_evi_dist_comp_plot
-ggsave("Outputs/plots/ii_pruc_delta_evi_dist_comp_plot.jpg", 
-       width = 8, height = 4)
 
 ##### Barkerville #####
 
@@ -937,7 +821,395 @@ get_evi_bv_range <- function(dates){
 }
 
 bv_range_evi_all <- lapply(bv_dates, FUN = get_evi_bv_range)
-save(bv_range_evi_all, file = "bv_range_evi_all.RData")
+#save(bv_range_evi_all, file = "bv_range_evi_all.RData")
+
+load("Spatial_Layers/Productivity_comparison/Barkerville/bv_range_evi_all.RData")
+plot(bv_range_evi_all[[1]])
+
+names(bv_range_evi_all) <- bv_dates
+
+bv_evi_all_stack <- stack(bv_range_evi_all)
+
+# filter to july dates, average within
+bv_jul_evi_all <- raster::subset(bv_evi_all_stack,
+                                   grep('\\.07\\.', 
+                                        names(bv_evi_all_stack), 
+                                        value = T))
+
+bv_jul_year_groups <- as_tibble(bv_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 7) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+bv_jul_evi <- stackApply(bv_jul_evi_all, 
+                           indices = bv_jul_year_groups$group,
+                           fun = mean)
+plot(bv_jul_evi$index_1)
+
+# filter to Sept dates, average within
+bv_sep_evi_all <- raster::subset(bv_evi_all_stack,
+                                   grep('\\.09\\.', 
+                                        names(bv_evi_all_stack), 
+                                        value = T))
+
+bv_sep_year_groups <- as_tibble(bv_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 9) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+bv_sep_evi <- stackApply(bv_sep_evi_all, 
+                           indices = bv_sep_year_groups$group,
+                           fun = mean)
+plot(bv_sep_evi$index_1)
+
+# Delta EVI
+bv_delta_evi <- bv_jul_evi - bv_sep_evi
+plot(bv_delta_evi$layer.1)
+
+### Extract Jul evi across bv cutblocks and fires
+bv_cut_all <- st_read("Spatial_Layers/Productivity_comparison/Barkerville/BV_Cons_Cutblocks/VEG_CONSOLIDATED_CUT_BLOCKS_SP.gdb/") %>% 
+  st_transform(crs = crs(bv_range))
+# plot(st_geometry(bv_cut_all)) # looks good
+# plot(st_geometry(bv_range), add = T)
+
+bv_cut <- st_intersection(bv_cut_all, bv_range)
+# 3946 cutblocks
+#plot(st_geometry(bv_cut))
+
+bv_cut_list <- split(bv_cut, seq(nrow(bv_cut)))
+
+bv_cut_yearly_jul_evi <- lapply(bv_cut_list, bv_jul_evi, "july_evi",
+                                  FUN = extract_yearly_evi_cutblocks)
+bv_cut_yearly_jul_evi_df <- do.call("rbind", bv_cut_yearly_jul_evi)
+
+ggplot(bv_cut_yearly_jul_evi_df, aes(x = year_since_cut,
+                                       y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest harvest",
+       y = "Mean July EVI")
+
+# fires
+bv_fire_all <- st_read("Spatial_Layers/Productivity_comparison/Barkerville/BV_Fires/PROT_HISTORICAL_FIRE_POLYS_SP/") %>% 
+  st_transform(crs = crs(bv_range)) %>% 
+  rename(FIRE_LABEL = FIRELABEL)
+plot(st_geometry(bv_fire_all)) # looks good
+plot(st_geometry(bv_range), add = T)
+
+bv_fire <- st_intersection(bv_fire_all, bv_range)
+# 77 fires
+plot(st_geometry(bv_fire))
+
+bv_fire_list <- split(bv_fire, seq(nrow(bv_fire)))
+
+bv_fire_yearly_jul_evi <- lapply(bv_fire_list, bv_jul_evi, "july_evi",
+                                   FUN = extract_yearly_evi_fires)
+bv_fire_yearly_jul_evi_df <- do.call("rbind", bv_fire_yearly_jul_evi)
+
+ggplot(bv_fire_yearly_jul_evi_df, aes(x = year_since_fire,
+                                        y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since fire",
+       y = "Mean July EVI")
+
+### Extract delta evi across bv cutblocks and fires
+# cutblocks
+bv_cut_yearly_delta_evi <- lapply(bv_cut_list, bv_delta_evi, "delta_evi",
+                                    FUN = extract_yearly_evi_cutblocks)
+bv_cut_yearly_delta_evi_df <- do.call("rbind", bv_cut_yearly_delta_evi)
+
+ggplot(bv_cut_yearly_delta_evi_df, aes(x = year_since_cut,
+                                         y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest harvest",
+       y = "Delta EVI")
+
+# fires
+bv_fire_yearly_delta_evi <- lapply(bv_fire_list, bv_delta_evi, "delta_evi",
+                                     FUN = extract_yearly_evi_fires)
+bv_fire_yearly_delta_evi_df <- do.call("rbind", bv_fire_yearly_delta_evi)
+
+ggplot(bv_fire_yearly_delta_evi_df, aes(x = year_since_fire,
+                                          y = evi)) +
+  geom_point(size = 0.25, alpha = 0.15) +
+  geom_smooth() +
+  labs(x = "Years since forest fire",
+       y = "Delta EVI")
+
+##### Compare EVI across ranges ####
+
+## add inset map with range locations below legend
+focal_ranges <- bc_caribou_ranges %>% 
+  filter(HERD_NAME %in% c("Itcha-Ilgachuz", "Barkerville",
+                          "Purcells South", "Purcell Central")) %>% 
+  mutate(caribou_range = if_else(HERD_NAME %in% c("Purcells South", "Purcell Central"),
+                                 "Purcells",
+                                 HERD_NAME))
+bc <- bcmaps::bc_bound()
+
+inset_map <- ggplot(bc) +
+  geom_sf(size = 0.3) +
+  geom_sf(data = focal_ranges, 
+          aes(fill = caribou_range),
+          size = 0.3) +
+  scale_fill_viridis_d() +
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "none")
+
+### July EVI
+
+# compare trends in Itcha vs. Purcells
+ii_cut_yearly_evi_df$site <- "Itcha-Ilgachuz"
+purc_cut_yearly_jul_evi_df$site <- "Purcells"
+bv_cut_yearly_jul_evi_df$site <- "Barkerville"
+
+cut_jul_evi_range_comp <- rbind(purc_cut_yearly_jul_evi_df,
+                                ii_cut_yearly_evi_df,
+                                bv_cut_yearly_jul_evi_df)
+
+
+ggplot(cut_jul_evi_range_comp, aes(x = year_since_cut, y = evi,
+                                   colour = site, group = site)) +
+  geom_jitter(size = 0.05, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
+              fill = NA, color = "black") +
+  scale_color_viridis_d() +
+  labs(x = "Years since forest harvest",
+       y = "Mean July EVI",
+       colour = "")
+
+# fire
+purc_fire_yearly_jul_evi_df$site <- "Purcells"
+ii_fire_yearly_evi_df$site <- "Itcha-Ilgachuz"
+bv_fire_yearly_jul_evi_df$site <- "Barkerville"
+
+fire_jul_evi_range_comp <- rbind(purc_fire_yearly_jul_evi_df,
+                                 ii_fire_yearly_evi_df,
+                                 bv_fire_yearly_jul_evi_df)
+
+ggplot(fire_jul_evi_range_comp, aes(x = year_since_fire, y = evi,
+                                    colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  scale_color_viridis_d() +
+  labs(x = "Years since forest fire",
+       y = "Mean July EVI",
+       colour = "")
+
+cut_jul_evi_range_comp_merge <- cut_jul_evi_range_comp %>% 
+  rename(dist_id = cutblock_id,
+         year_since_dist = year_since_cut) %>% 
+  mutate(dist_type = "Cutblock")
+
+fire_jul_evi_range_comp_merge <- fire_jul_evi_range_comp %>% 
+  rename(dist_id = fire_id,
+         year_since_dist = year_since_fire) %>% 
+  mutate(dist_type = "Fire")
+
+all_jul_evi_comp <- rbind(cut_jul_evi_range_comp_merge,
+                          fire_jul_evi_range_comp_merge)
+
+jul_evi_dist_comp_plot <- ggplot(all_jul_evi_comp, aes(x = year_since_dist, y = evi,
+                                                       colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
+              fill = NA, color = "white") +
+  scale_colour_viridis_d() +
+  labs(x = "Years since disturbance",
+       y = "Mean July EVI",
+       colour = "Caribou range") +
+  theme(legend.position = c(1.2, 0.8),
+        plot.margin = margin(0.5, 5, 0.5, 0.5, "cm")) +
+  facet_wrap(~dist_type, scales = "free_x")
+jul_evi_dist_comp_plot
+
+jul_evi_dist_comp_plot_inset <- ggdraw() +
+  draw_plot(jul_evi_dist_comp_plot, x = 0, y = 0) +
+  draw_plot(inset_map, x = 0.66, y = 0.15, width = 0.45, height = 0.45)
+jul_evi_dist_comp_plot_inset
+
+ggsave("Outputs/plots/jul_evi_dist_comp_plot2.jpg", 
+       width = 8, height = 4)
+
+### Delta EVI
+# cutblocks
+ii_cut_yearly_delta_evi_df$site <- "Itcha-Ilgachuz"
+purc_cut_yearly_delta_evi_df$site <- "Purcells"
+bv_cut_yearly_delta_evi_df$site <- "Barkerville"
+
+cut_delta_evi_range_comp <- rbind(purc_cut_yearly_delta_evi_df,
+                                  ii_cut_yearly_delta_evi_df,
+                                  bv_cut_yearly_delta_evi_df)
+
+# fire
+ii_fire_yearly_delta_evi_df$site <- "Itcha-Ilgachuz"
+purc_fire_yearly_delta_evi_df$site <- "Purcells"
+bv_fire_yearly_delta_evi_df$site <- "Barkerville"
+
+fire_delta_evi_range_comp <- rbind(purc_fire_yearly_delta_evi_df,
+                                   ii_fire_yearly_delta_evi_df,
+                                   bv_fire_yearly_delta_evi_df)
+
+# combine and plot
+cut_delta_evi_range_comp_merge <- cut_delta_evi_range_comp %>% 
+  rename(dist_id = cutblock_id,
+         year_since_dist = year_since_cut) %>% 
+  mutate(dist_type = "Cutblock")
+
+fire_delta_evi_range_comp_merge <- fire_delta_evi_range_comp %>% 
+  rename(dist_id = fire_id,
+         year_since_dist = year_since_fire) %>% 
+  mutate(dist_type = "Fire")
+
+all_delta_evi_comp <- rbind(cut_delta_evi_range_comp_merge,
+                            fire_delta_evi_range_comp_merge)
+
+delta_evi_dist_comp_plot <- ggplot(all_delta_evi_comp, aes(x = year_since_dist, y = evi,
+                                                           colour = site, group = site)) +
+  geom_jitter(size = 0.1, alpha = 0.05, width = 0.2) +
+  geom_smooth() +
+  geom_ribbon(stat = "smooth", method = "gam", size = 0.1,
+              fill = NA, color = "black") +
+  scale_color_viridis_d() +
+  labs(x = "Years since disturbance",
+       y = "Delta EVI",
+       colour = "Caribou range") +
+  facet_wrap(~dist_type, scales = "free_x")
+delta_evi_dist_comp_plot
+
+ggsave("Outputs/plots/delta_evi_dist_comp_plot.jpg", 
+       width = 8, height = 4)
+
+
+#### Athabasca herd ranges ####
+ab_caribou_ranges <- st_read("Spatial_Layers/Productivity_comparison/AB_CaribouRange/Caribou_Range.shp")
+head(ab_caribou_ranges)
+plot(st_geometry(ab_caribou_ranges))
+unique(ab_caribou_ranges$LOCALRANGE)
+
+atha_range <- filter(ab_caribou_ranges, 
+                     LOCALRANGE %in% c("East Side Athabasca",
+                                       "West Side Athabasca"))
+plot(st_geometry(atha_range))
+
+atha_centre <- atha_range %>% 
+  st_union() %>% 
+  st_transform(crs(sta.wgs)) %>% 
+  st_centroid(atha_range) %>% 
+  as_vector()
+
+atha_utm_crs <- lonlat2UTM(atha_centre)
+
+atha_range <- st_transform(atha_range, crs = atha_utm_crs)
+plot(st_geometry(atha_range))
+
+atha_bbox <- atha_range %>% 
+  st_buffer(1000)
+
+atha_bbox <- st_as_sfc(st_bbox(atha_bbox))
+crs(atha_range)
+
+plot(atha_bbox)
+plot(st_geometry(atha_range), add = T)
+st_write(atha_bbox, dsn = "Spatial_Layers/Productivity_comparison/Athabasca/atha_bbox.shp")
+
+atha_aoi_centre <- st_union(atha_range) 
+atha_aoi_centre <- st_geometry(st_centroid(atha_aoi_centre)) %>% 
+  st_transform(crs = crs(sta.wgs)) %>% 
+  unlist()
+
+atha_dates <- mt_dates(product = "MOD13Q1", lat = atha_aoi_centre[2],
+                     lon = atha_aoi_centre[1]) %>% 
+  mutate(month = month(ymd(calendar_date))) %>% 
+  filter(month %in% c(7, 9)) %>% 
+  pull(calendar_date)
+
+save(atha_aoi_centre, atha_range, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_aoi_and_range.RData")
+# plot(atha_range)
+# atha_range_sf <- st_as_sf(atha_range)
+
+install.packages("beepr")
+library(beepr)
+beep(8)
+
+# write function for extracting evi
+get_evi_atha_range <- function(dates){
+  evi_right <- mt_subset(product = "MOD13Q1",
+                             lat = atha_aoi_centre[2] + 0.3, 
+                             lon = atha_aoi_centre[1] + 1.1, # xmin
+                             band = "250m_16_days_EVI",
+                             start = atha_dates[1],
+                             end = atha_dates[1],
+                             km_lr = 100, 
+                             km_ab = 100,
+                             internal = TRUE)
+  evi_right_raster <- mt_to_raster(evi_right, 
+                                  reproject = F)
+  evi_right_utm <- projectRaster(evi_right_raster,
+                                crs = crs(atha_range))
+
+  plot(evi_right_utm)
+  plot(st_geometry(atha_range), add = T)
+  
+  evi_left <- mt_subset(product = "MOD13Q1",
+                        lat = atha_aoi_centre[2] -0.7, # can probably go to like -0.6
+                        lon = atha_aoi_centre[1] - 1.1, # xmin
+                        band = "250m_16_days_EVI",
+                        start = atha_dates[1],
+                        end = atha_dates[1],
+                        km_lr = 100, 
+                        km_ab = 100,
+                        internal = TRUE); beep(8)
+  evi_left_raster <- mt_to_raster(evi_left, 
+                                   reproject = F)
+  evi_left_utm <- projectRaster(evi_left_raster,
+                                crs = crs(atha_range))
+  
+  evi_middle <-  mt_subset(product = "MOD13Q1",
+                       lat = atha_aoi_centre[2], 
+                       lon = atha_aoi_centre[1], # xmin
+                       band = "250m_16_days_EVI",
+                       start = atha_dates[1],
+                       end = atha_dates[1],
+                       km_lr = 50, 
+                       km_ab = 100,
+                       internal = TRUE)
+  evi_middle_raster <- mt_to_raster(evi_middle, 
+                                    reproject = F)
+  evi_middle_utm <- projectRaster(evi_middle_raster,
+                                  crs = crs(atha_range))
+  
+  plot(evi_right_utm)
+  plot(evi_middle_utm, add = T)
+  plot(evi_left_utm, add = T)
+  plot(st_geometry(atha_range), add = T)
+  
+  
+  evi_merged <- raster::merge(evi_right_raster, 
+                              evi_left_raster,
+                              evi_middle_raster)
+  
+  evi_utm <- projectRaster(evi_merged, 
+                           crs = crs(atha_range))
+  
+  atha_evi_mask <- raster::mask(evi_utm, atha_range)
+  plot(atha_evi_mask)
+  plot(st_geometry(atha_range), add = T)
+}
+
+atha_range_evi_test <- lapply(atha_dates[1], FUN = get_evi_atha_range)
+plot(st_geometry(atha_range))
+plot(atha_range_evi_test[[1]], add = T)
 
 
 
