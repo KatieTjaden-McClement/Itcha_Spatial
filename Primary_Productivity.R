@@ -1134,7 +1134,7 @@ atha_dates <- mt_dates(product = "MOD13Q1", lat = atha_aoi_centre[2],
   filter(month %in% c(7, 9)) %>% 
   pull(calendar_date)
 
-save(atha_aoi_centre, atha_range, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_aoi_and_range.RData")
+#save(atha_aoi_centre, atha_range, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_aoi_and_range.RData")
 # plot(atha_range)
 # atha_range_sf <- st_as_sf(atha_range)
 
@@ -1148,52 +1148,37 @@ get_evi_atha_range <- function(dates){
                              lat = atha_aoi_centre[2] + 0.3, 
                              lon = atha_aoi_centre[1] + 1.1, # xmin
                              band = "250m_16_days_EVI",
-                             start = atha_dates[1],
-                             end = atha_dates[1],
+                             start = dates,
+                             end = dates,
                              km_lr = 100, 
                              km_ab = 100,
                              internal = TRUE)
   evi_right_raster <- mt_to_raster(evi_right, 
                                   reproject = F)
-  evi_right_utm <- projectRaster(evi_right_raster,
-                                crs = crs(atha_range))
-
-  plot(evi_right_utm)
-  plot(st_geometry(atha_range), add = T)
   
   evi_left <- mt_subset(product = "MOD13Q1",
-                        lat = atha_aoi_centre[2] -0.7, # can probably go to like -0.6
-                        lon = atha_aoi_centre[1] - 1.1, # xmin
+                        lat = atha_aoi_centre[2] -0.7, 
+                        lon = atha_aoi_centre[1] - 0.6,
                         band = "250m_16_days_EVI",
-                        start = atha_dates[1],
-                        end = atha_dates[1],
+                        start = dates,
+                        end = dates,
                         km_lr = 100, 
                         km_ab = 100,
-                        internal = TRUE); beep(8)
+                        internal = TRUE)
   evi_left_raster <- mt_to_raster(evi_left, 
                                    reproject = F)
-  evi_left_utm <- projectRaster(evi_left_raster,
-                                crs = crs(atha_range))
   
   evi_middle <-  mt_subset(product = "MOD13Q1",
                        lat = atha_aoi_centre[2], 
-                       lon = atha_aoi_centre[1], # xmin
+                       lon = atha_aoi_centre[1] - 0.1, # xmin
                        band = "250m_16_days_EVI",
-                       start = atha_dates[1],
-                       end = atha_dates[1],
-                       km_lr = 50, 
+                       start = dates,
+                       end = dates,
+                       km_lr = 70, 
                        km_ab = 100,
                        internal = TRUE)
   evi_middle_raster <- mt_to_raster(evi_middle, 
                                     reproject = F)
-  evi_middle_utm <- projectRaster(evi_middle_raster,
-                                  crs = crs(atha_range))
-  
-  plot(evi_right_utm)
-  plot(evi_middle_utm, add = T)
-  plot(evi_left_utm, add = T)
-  plot(st_geometry(atha_range), add = T)
-  
   
   evi_merged <- raster::merge(evi_right_raster, 
                               evi_left_raster,
@@ -1203,14 +1188,13 @@ get_evi_atha_range <- function(dates){
                            crs = crs(atha_range))
   
   atha_evi_mask <- raster::mask(evi_utm, atha_range)
-  plot(atha_evi_mask)
-  plot(st_geometry(atha_range), add = T)
 }
 
-atha_range_evi_test <- lapply(atha_dates[1], FUN = get_evi_atha_range)
+atha_range_evi_all <- lapply(atha_dates, FUN = get_evi_atha_range)
 plot(st_geometry(atha_range))
-plot(atha_range_evi_test[[1]], add = T)
+plot(atha_range_evi_all[[1]], add = T)
 
+save(atha_range_evi_all, file = "atha_range_evi_all.RData")
 
 
 
