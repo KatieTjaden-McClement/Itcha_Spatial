@@ -8,6 +8,8 @@
 
 library(tidyverse)
 library(sf)
+library(terra)
+library(tidyterra)
 library(leaflet)
 library(raster)
 library(MODISTools)
@@ -16,6 +18,11 @@ library(bcmaps)
 library(lubridate)
 library(NatParksPalettes)
 library(cowplot)
+
+library(lme4)
+library(merTools)
+
+library(beepr)
 
 theme_set(theme_classic())
 
@@ -214,7 +221,7 @@ names(ii_range_jul_evi_all) <- jul_dates
 ##### Extracting July EVI across II cutblocks #####
 
 # unprocessed list output of get_july_evi_rast_ii_range function lapply loop
-load("II_EVI_downloads/ii_range_jul_evi_all.RData")
+load("Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_range_jul_evi_all.RData")
 head(ii_range_jul_evi_all)
 
 plot(ii_range_jul_evi_all[[1]])
@@ -847,6 +854,7 @@ bv_jul_evi <- stackApply(bv_jul_evi_all,
                            indices = bv_jul_year_groups$group,
                            fun = mean)
 plot(bv_jul_evi$index_1)
+plot(st_geometry(bv_cut), add = T)
 
 # filter to Sept dates, average within
 bv_sep_evi_all <- raster::subset(bv_evi_all_stack,
@@ -974,7 +982,8 @@ bv_cut_yearly_jul_evi_df$site <- "Barkerville"
 cut_jul_evi_range_comp <- rbind(purc_cut_yearly_jul_evi_df,
                                 ii_cut_yearly_evi_df,
                                 bv_cut_yearly_jul_evi_df)
-
+# save(cut_jul_evi_range_comp, 
+#      file = "Spatial_Layers/Productivity_comparison/cut_jul_evi_range_comp.RData")
 
 ggplot(cut_jul_evi_range_comp, aes(x = year_since_cut, y = evi,
                                    colour = site, group = site)) +
@@ -995,6 +1004,8 @@ bv_fire_yearly_jul_evi_df$site <- "Barkerville"
 fire_jul_evi_range_comp <- rbind(purc_fire_yearly_jul_evi_df,
                                  ii_fire_yearly_evi_df,
                                  bv_fire_yearly_jul_evi_df)
+# save(fire_jul_evi_range_comp, 
+#      file = "Spatial_Layers/Productivity_comparison/fire_jul_evi_range_comp.RData")
 
 ggplot(fire_jul_evi_range_comp, aes(x = year_since_fire, y = evi,
                                     colour = site, group = site)) +
@@ -1138,10 +1149,6 @@ save(atha_aoi_centre, atha_range, file = "Spatial_Layers/Productivity_comparison
 # plot(atha_range)
 # atha_range_sf <- st_as_sf(atha_range)
 
-install.packages("beepr")
-library(beepr)
-beep(8)
-
 # write function for extracting evi
 get_evi_atha_range <- function(dates){
   evi_right <- mt_subset(product = "MOD13Q1",
@@ -1211,6 +1218,429 @@ atha_range_evi_test <- lapply(atha_dates[1], FUN = get_evi_atha_range)
 plot(st_geometry(atha_range))
 plot(atha_range_evi_test[[1]], add = T)
 
+load("Spatial_Layers/Productivity_comparison/Athabasca/atha_range_evi_all.RData")
+plot(atha_range_evi_all[[1]])
+
+names(atha_range_evi_all) <- atha_dates[1:91]
+
+atha_evi_all_stack <- stack(atha_range_evi_all)
+
+# filter to july dates, average within
+atha_jul_evi_all <- raster::subset(atha_evi_all_stack,
+                                 grep('\\.07\\.', 
+                                      names(atha_evi_all_stack), 
+                                      value = T))
+
+atha_jul_year_groups <- as_tibble(atha_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 7) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+atha_jul_evi <- stackApply(atha_jul_evi_all, 
+                         indices = atha_jul_year_groups$group,
+                         fun = mean)
+plot(atha_jul_evi$index_1)
+plot(st_geometry(atha_range), add = T)
+
+# filter to Sept dates, average within
+atha_sep_evi_all <- raster::subset(atha_evi_all_stack,
+                                 grep('\\.09\\.', 
+                                      names(atha_evi_all_stack), 
+                                      value = T))
+
+atha_sep_year_groups <- as_tibble(atha_dates[1:91]) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 9) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+atha_sep_evi <- stackApply(atha_sep_evi_all, 
+                         indices = atha_sep_year_groups$group,
+                         fun = mean)
+plot(atha_sep_evi$index_1)
+
+# Delta EVI
+atha_delta_evi <- atha_jul_evi - atha_sep_evi
+plot(atha_delta_evi$layer.1)
+
+### NTEMS Cutblock Data
+ntems_cut <- raster("Spatial_Layers/NTEMS_Forest_Harvest_1985-2020/CA_Forest_Harvest_1985-2020.tif")
+plot(ntems_cut)
+crs(ntems_cut)
+
+atha_bbox_nad83 <- st_transform(atha_bbox, crs = crs(ntems_cut)) %>% 
+  st_as_sf()
+atha_cut <- crop(ntems_cut, extent(atha_bbox_nad83))
+plot(atha_cut)
+
+atha_cut <- projectRaster(atha_cut, crs = crs(atha_range)); beep(8)
+plot(atha_cut)
+plot(st_geometry(atha_range), add = T)
+
+atha_cut_mask <- mask(atha_cut, atha_range)
+plot(atha_cut_mask)
+
+# could vectorize these cutblock polygons and then use old function or try to remake it using rasters for evi and cutblocks...
+atha_cut_vec <- rasterToPolygons(atha_cut_mask, na.rm = T, dissolve = F); beep(8)
+# started 11:23 am... didn't finish by end of day
+
+### Try with terra package instead, seems to be quicker
+ntems_cut <- rast("Spatial_Layers/NTEMS_Forest_Harvest_1985-2020/CA_Forest_Harvest_1985-2020.tif")
+plot(ntems_cut)
+crs(ntems_cut)
+# test <- clamp(ntems_cut, lower = 1, values = F)
+# hist(test)
+
+atha_bbox_nad83 <- vect(atha_bbox_nad83)
+atha_range_sv <- vect(atha_range)
+
+atha_cut_crop <- crop(ntems_cut, atha_bbox_nad83)
+plot(atha_cut_crop)
+
+atha_cut_crop <- terra::project(atha_cut_crop, crs(atha_range),
+                                method = "near") # year data is categorigal, not continuous
+
+atha_cut_mask <- mask(atha_cut_crop, atha_range_sv)
+plot(atha_cut_mask)
+
+hist(atha_cut_mask$`CA_Forest_Harvest_1985-2020`)
+
+# remove 0s
+atha_cut_mask <- clamp(atha_cut_mask, lower = 1, upper = 3000,
+                       values = F)
+plot(atha_cut_mask)
+plot(atha_range_sv, add = T)
+
+hist(atha_cut_mask$`CA_Forest_Harvest_1985-2020`)
+
+# turn into polygons:
+atha_cut_poly <- as.polygons(atha_cut_mask, values = T,
+                             dissolve = T, na.rm = T)
+atha_cut_poly <- atha_cut_poly %>% 
+  rename(year_cut = `CA_Forest_Harvest_1985-2020`)
+plot(atha_cut_poly)
+plot(atha_range_sv, add = T) # looks good
+# one polygon feature for each year... disaggregate
+
+atha_cut_poly <- disagg(atha_cut_poly)
+atha_cut_poly #20051 cutblock polygons... 
+plot(atha_cut_poly[3000])/1e6
+
+# exclude "cutblocks" that are only one grid cell - likely roads/not actually cutblocks?
+atha_cut_poly$area <- expanse(atha_cut_poly)
+mean(atha_cut_poly$area) # ~3 ha
+
+atha_cut_poly <- atha_cut_poly %>% 
+  dplyr::filter(area > 1000) %>% 
+  mutate(cutblock_id = row_number())
+atha_cut_poly # 11143 cutblocks
+plot(atha_cut_poly)
+sum(atha_cut_poly$area)/1e6 # 601 km2
+
+# atha_cut_list <- split(atha_cut_poly, "area")
+# atha_cut_list
+
+# convert to spatraster
+atha_jul_evi_sr <- rast(atha_jul_evi)
+atha_jul_evi_sr
+
+# extract evi across cutblock polygons:
+atha_cut_yearly_evi <- terra::extract(atha_jul_evi_sr, atha_cut_poly,
+                                 fun = mean, method = "bilinear")
+
+# rename evi "index x" to years, covert to long format, add year since cut info
+colnames(atha_cut_yearly_evi)[2:24] <- c(2000:2022)
+
+atha_cut_yearly_evi <- atha_cut_yearly_evi %>% 
+  rename(cutblock_id = ID) %>% 
+  pivot_longer(cols = -cutblock_id, names_to = "year_evi",
+               values_to = "evi") %>% 
+  left_join(as_tibble(atha_cut_poly), by = "cutblock_id") %>% 
+  mutate(year_since_cut = as.numeric(year_evi) - year_cut,
+         type = "jul_evi")
+
+hist(atha_cut_yearly_evi$year_since_cut)
+
+ggplot(atha_cut_yearly_evi, aes(x = year_since_cut,
+                                y = jul_evi)) +
+  #geom_point(size = 0.1, alpha = 0.05) +
+  geom_smooth()
+
+# should weight cutblock influence by size in the model somehow...
+
+##### Snake-Sahtaneh #####
+snake <- vect("Spatial_Layers/Productivity_comparison/BC_Caribou_Ranges/GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
+  filter(HERD_NAME == "Snake-Sahtaneh")
+plot(snake)
+
+snake_centroid <- snake %>% 
+  terra::project(y = crs(sta.wgs)) %>% 
+  terra::centroids() %>%
+  crds()
+snake_centroid[[1]]
+
+snake_utm_crs <- lonlat2UTM(c(snake_centroid[[1]], snake_centroid[[2]]))
+# UTM zone 10 (same as itcha)
+
+snake_range <- terra::project(x = snake, y = crs(sta.utm))
+plot(snake_range)
+
+snake_dates <- mt_dates(product = "MOD13Q1", lat = snake_centroid[[2]],
+                       lon = snake_centroid[[1]]) %>% 
+  mutate(month = month(ymd(calendar_date))) %>% 
+  filter(month %in% c(7, 9)) %>% 
+  pull(calendar_date)
+
+save(snake_centroid, snake_range, file = "Spatial_Layers/Productivity_comparison/Snake_Sahtaneh/snake_aoi_and_range.RData")
+# plot(atha_range)
+# atha_range_sf <- st_as_sf(atha_range)
+
+# write function for extracting evi
+get_evi_snake_range <- function(dates){
+  evi_right <- mt_subset(product = "MOD13Q1",
+                         lat = snake_centroid[[2]], 
+                         lon = snake_centroid[[1]], # xmin
+                         band = "250m_16_days_EVI",
+                         start = snake_dates[1],
+                         end = snake_dates[1],
+                         km_lr = 100, 
+                         km_ab = 100,
+                         internal = TRUE)
+  evi_right_raster <- mt_to_terra(evi_right, 
+                                   reproject = F)
+  evi_right_utm <- project(evi_right_raster,
+                           crs(sta.utm))
+  
+  plot(evi_right_utm)
+  plot(snake_range, add = T)
+  
+  # evi_left <- mt_subset(product = "MOD13Q1",
+  #                       lat = atha_aoi_centre[2] -0.7, # can probably go to like -0.6
+  #                       lon = atha_aoi_centre[1] - 1.1, # xmin
+  #                       band = "250m_16_days_EVI",
+  #                       start = atha_dates[1],
+  #                       end = atha_dates[1],
+  #                       km_lr = 100, 
+  #                       km_ab = 100,
+  #                       internal = TRUE); beep(8)
+  # evi_left_raster <- mt_to_raster(evi_left, 
+  #                                 reproject = F)
+  # evi_left_utm <- projectRaster(evi_left_raster,
+  #                               crs = crs(atha_range))
+  # 
+  # evi_middle <-  mt_subset(product = "MOD13Q1",
+  #                          lat = atha_aoi_centre[2], 
+  #                          lon = atha_aoi_centre[1], # xmin
+  #                          band = "250m_16_days_EVI",
+  #                          start = atha_dates[1],
+  #                          end = atha_dates[1],
+  #                          km_lr = 50, 
+  #                          km_ab = 100,
+  #                          internal = TRUE)
+  # evi_middle_raster <- mt_to_raster(evi_middle, 
+  #                                   reproject = F)
+  # evi_middle_utm <- projectRaster(evi_middle_raster,
+  #                                 crs = crs(atha_range))
+  # 
+  # plot(evi_right_utm)
+  # plot(evi_middle_utm, add = T)
+  # plot(evi_left_utm, add = T)
+  # plot(st_geometry(atha_range), add = T)
+  # 
+  # 
+  # evi_merged <- raster::merge(evi_right_raster, 
+  #                             evi_left_raster,
+  #                             evi_middle_raster)
+  # 
+  # evi_utm <- projectRaster(evi_merged, 
+  #                          crs = crs(atha_range))
+  # 
+  # atha_evi_mask <- raster::mask(evi_utm, atha_range)
+  # plot(atha_evi_mask)
+  # plot(st_geometry(atha_range), add = T)
+}
 
 
 
+
+
+
+##### Modelling #####
+load("Spatial_Layers/Productivity_comparison/cut_jul_evi_range_comp.RData")
+load("Spatial_Layers/Productivity_comparison/fire_jul_evi_range_comp.RData")
+
+#cutblocks
+
+# ii_yearly_cut_model <- lmer(evi ~ as.character(year_since_cut) + (1 | cutblock_id),
+#                             data = ii_cut_yearly_evi_df)
+
+# try all ranges together with interactions:
+#filter to years that all ranges have data for:
+cut_evi_model_data <- cut_jul_evi_range_comp %>% 
+  filter(!is.na(evi), year_since_cut <= 50,
+         year_since_cut >= -20)
+
+# run all ranges together adding fixed effect for range?
+yearly_cut_model <- lmer(evi ~ as.character(year_since_cut)*site + (1 | cutblock_id),
+                         data = cut_evi_model_data)
+summary(yearly_cut_model)
+
+plot(yearly_cut_model) # looks cloud-y
+
+cut_evi_pred_int <- predictInterval(yearly_cut_model, 
+                                    newdata = cut_evi_model_data,
+                                    which = "fixed") # all data is too big
+
+cut_evi_model_data %>% 
+  mutate(pred_evi = predict(yearly_cut_model)) %>% 
+  group_by(site, year_since_cut) %>% 
+  summarise(pred_evi = mean(pred_evi)) %>% 
+  ggplot(aes(x = year_since_cut, y = pred_evi, 
+             group = site, colour = site)) +
+  geom_point() +
+  geom_line()
+
+# predict yearly evi values
+
+# from Clayton Lamb's github:
+boot.dat <- data.frame()
+for(i in 1:500){
+  dat <- cut_evi_model_data %>%
+    group_by(cutblock_id) %>%
+    sample_frac(1, replace = TRUE) #pulls the same number, but with replacement so thats the bootstrapping part
+  
+  # I don't think you need to run the model to bootstrap, just need to resample...
+  # mod <- dat %>%
+  #   lmer(evi ~ as.character(year_since_cut)*site + (1 | cutblock_id),
+  #        data = .)
+  # 
+  # dat$pred <-predict(mod)
+  
+  boot.dat <- dat %>%
+    group_by(site, year_since_cut) %>%
+    summarise(mean_evi = mean(evi, na.rm=TRUE)) %>% #why is this evi, not pred??
+    mutate(iter=i) %>%
+    rbind(boot.dat)
+  
+  print(i)
+}
+
+cut_boot_ests <- boot.dat %>%
+  group_by(site, year_since_cut) %>%
+  summarise(mean=mean(mean_evi, na.rm=TRUE),
+            lower=quantile(mean_evi, 0.05),
+            upper=quantile(mean_evi,0.95)) %>% 
+  mutate(dist_type = "Cutblock") %>% 
+  rename(year_since_dist = year_since_cut)
+
+cut_boot_ests %>%
+  ggplot(aes(x=year_since_dist, y=mean, 
+             group = site, colour = site)) +
+  geom_vline(xintercept = 0, linetype="dotted") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width=0.01, alpha=0.2) +
+  geom_line() +
+  geom_point() +
+  scale_color_viridis_d() +
+  labs(x = "Time since cut (years)", y = "Mean EVI",
+       colour = "")
+
+## fire
+range(fire_jul_evi_range_comp$year_since_fire)
+fire_evi_model_data <- fire_jul_evi_range_comp %>% 
+  filter(!is.na(evi), year_since_fire <= 90,
+         year_since_fire >= -18)
+
+yearly_fire_model <- lmer(evi ~ as.character(year_since_fire)*site 
+                          + (1 | fire_id),
+                         data = fire_evi_model_data)
+summary(yearly_fire_model)
+
+plot(yearly_fire_model) # looks cloud-y
+
+# fire_evi_pred_int <- predictInterval(yearly_fire_model, 
+#                                     newdata = fire_evi_model_data,
+#                                     which = "fixed") # all data is too big
+
+fire_evi_model_data %>% 
+  mutate(pred_evi = predict(yearly_fire_model)) %>% 
+  group_by(site, year_since_fire) %>% 
+  summarise(pred_evi = mean(pred_evi)) %>% 
+  ggplot(aes(x = year_since_fire, y = pred_evi, 
+             group = site, colour = site)) +
+  geom_point() +
+  geom_line()
+
+# predict yearly evi values
+
+# from Clayton Lamb's github:
+boot.dat_fire <- data.frame()
+for(i in 1:500){
+  dat <- fire_evi_model_data %>%
+    group_by(fire_id) %>%
+    sample_frac(1, replace = TRUE) #pulls the same number, but with replacement so thats the bootstrapping part
+  
+  # I don't think you need to run the model to bootstrap, just need to resample...
+  # mod <- dat %>%
+  #   lmer(evi ~ as.character(year_since_fire)*site + (1 | fireblock_id),
+  #        data = .)
+  # 
+  # dat$pred <-predict(mod)
+  
+  boot.dat_fire <- dat %>%
+    group_by(site, year_since_fire) %>%
+    summarise(mean_evi = mean(evi, na.rm=TRUE)) %>% #why is this evi, not pred??
+    mutate(iter=i) %>%
+    rbind(boot.dat_fire)
+  
+  print(i)
+}
+
+fire_boot_ests <- boot.dat_fire %>%
+  group_by(site, year_since_fire) %>%
+  summarise(mean=mean(mean_evi, na.rm=TRUE),
+            lower=quantile(mean_evi, 0.05),
+            upper=quantile(mean_evi,0.95)) %>% 
+  mutate(dist_type = "Fire") %>% 
+  rename(year_since_dist = year_since_fire)
+
+fire_boot_ests %>%
+  ggplot(aes(x=year_since_dist, y=mean, 
+             group = site, colour = site)) +
+  geom_vline(xintercept = 0, linetype="dotted") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width=0.01, alpha=0.4) +
+  geom_line() +
+  geom_point() +
+  scale_color_viridis_d() +
+  labs(x = "Time since fire (years)", y = "Mean EVI",
+       colour = "")
+
+# plot together
+dist_boot_ests <- rbind(cut_boot_ests, fire_boot_ests)
+
+jul_evi_dist_boot_plot <- ggplot(data = dist_boot_ests,
+       aes(x=year_since_dist, y=mean, 
+           group = site, colour = site)) +
+  geom_vline(xintercept = 0, linetype="dotted") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width=0.01, alpha=0.4) +
+  geom_line() +
+  geom_point() +
+  scale_color_viridis_d() +
+  labs(x = "Time since disturbance (years)", y = "Mean EVI",
+       colour = "") +
+  theme(legend.position = c(1.15, 0.8),
+        plot.margin = margin(0.5, 5, 0.5, 0.5, "cm")) +
+  facet_wrap(~dist_type, nrow = 1, scales = "free_x")
+
+jul_evi_dist_boot_comp_plot_inset <- ggdraw() +
+  draw_plot(jul_evi_dist_boot_plot, x = 0, y = 0) +
+  draw_plot(inset_map, x = 0.68, y = 0.1, width = 0.42, height = 0.42)
+jul_evi_dist_boot_comp_plot_inset
+
+ggsave("Outputs/plots/jul_evi_dist_boot_comp_plot.jpg", 
+       width = 9, height = 4.5)
