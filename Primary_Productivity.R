@@ -1,17 +1,13 @@
 ## Exploring Primary Productivity within Itcha and across regions
 # Does the vegetation response following disturbance support DMAC?
 
-#mt_to_raster was replaced with mt_to_terra in version 1.1.4
-#need to download older verison
-
-#devtools::install_version("MODISTools", "1.1.2")
 
 library(tidyverse)
 library(sf)
 library(terra)
 library(tidyterra)
 library(leaflet)
-library(raster)
+#library(raster)
 library(MODISTools)
 library(rgdal)
 library(bcmaps)
@@ -47,7 +43,7 @@ crs.utm <- lonlat2UTM(c(mlong,mlat))
 sta.utm <- st_transform(sta.wgs,crs=crs.utm) #crs.utm is from Extract_Spatial script
 
 # area of interest the included entire Itcha Ilgachuz range
-aoi <- st_read("bbox_ranges/")
+aoi <- st_read("bbox_ii_range/")
 plot(st_geometry(aoi))
 plot(st_geometry(sta.utm), add = T)
 
@@ -68,7 +64,7 @@ itcha_evi_Jul2021 <- mt_subset(product = "MOD13Q1",
                               band = "250m_16_days_EVI",
                               start = "2021-07-01",
                               end = "2021-07-15",
-                              km_lr = 100, #can't dowload any larger area
+                              km_lr = 100, #can't download any larger area
                               km_ab = 100,
                               internal = TRUE)
 itcha_evi_Jul2021 <- filter(itcha_evi_Jul2021, value >= -2000)
@@ -203,16 +199,13 @@ get_evi_rast_ii_range <- function(dates){
 test <- get_evi_rast_ii_range(dates = jul_dates[1]) #start 3pm, finish 3:45
 plot(test)
 
-<<<<<<< HEAD
-ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_july_evi_rast_ii_range) # started 9:30 Sept. 19
-save(ii_range_jul_evi_all, file = "ii_range_evi_all.RData")
-=======
+
 ii_range_jul_evi_all <- lapply(jul_dates, FUN = get_evi_rast_ii_range)
+#save(ii_range_jul_evi_all, file = "ii_range_evi_all.RData")
 #load("II_EVI_downloads/ii_range_jul_evi_all.RData")
 
 plot(ii_range_jul_evi_all[[12]]) #looks good!
 crs(ii_range_jul_evi_all[[1]]) #all good!
->>>>>>> dbda7120feb87df66523e1acca57c11b7453167f
 
 names(ii_range_jul_evi_all) <- jul_dates
 
@@ -227,7 +220,7 @@ head(ii_range_jul_evi_all)
 plot(ii_range_jul_evi_all[[1]])
 
 #convert list to rasterStack
-ii_range_jul_evi_all_stack <- stack(ii_range_jul_evi_all)
+ii_range_jul_evi_all_stack <- raster::stack(ii_range_jul_evi_all)
 head(ii_range_jul_evi_all_stack)
 plot(ii_range_jul_evi_all_stack)
 
@@ -239,10 +232,11 @@ merge_within_year_groups <- as_tibble(jul_dates) %>%
   group_by(year, month) %>% 
   mutate(group = cur_group_id())
 
-ii_range_jul_evi <- stackApply(ii_range_jul_evi_all_stack, 
-                               indices = merge_within_year_groups$group,
-                               fun = mean) # returns rasterBrick object
-plot(ii_range_jul_evi$index_1)
+ii_jul_evi <- raster::stackApply(ii_range_jul_evi_all_stack, 
+                                 indices = merge_within_year_groups$group,
+                                 fun = mean) # returns rasterBrick object
+#save(ii_jul_evi, file = "Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_jul_evi.RData")
+plot(ii_range_jul_evi$index_23)
 
 plot(st_geometry(II_ranges))
 plot(ii_range_jul_evi$index_1, add = T)
@@ -645,9 +639,9 @@ purcells_range_evi_all <- lapply(purc_dates, FUN = get_evi_purcells_range)
 load("Spatial_Layers/Productivity_comparison/Purcells/purcells_range_evi_all.RData")
 plot(purcells_range_evi_all[[1]])
 
-names(purcells_range_evi_all) <- purc_dates
+names(purcells_range_evi_all) <- purc_dates[1:91]
 
-purcells_evi_all_stack <- stack(purcells_range_evi_all)
+purcells_evi_all_stack <- raster::stack(purcells_range_evi_all)
 
 # filter to july dates, average within
 purc_jul_evi_all <- raster::subset(purcells_evi_all_stack,
@@ -662,9 +656,10 @@ purc_jul_year_groups <- as_tibble(purc_dates) %>%
   group_by(year) %>% 
   mutate(group = cur_group_id())
 
-purc_jul_evi <- stackApply(purc_jul_evi_all, 
+purc_jul_evi <- raster::stackApply(purc_jul_evi_all, 
                            indices = purc_jul_year_groups$group,
                            fun = mean)
+save(purc_jul_evi, file = "Spatial_Layers/Productivity_comparison/Purcells/purc_jul_evi.RData")
 plot(purc_jul_evi$index_1)
 
 # filter to Sept dates, average within
@@ -833,9 +828,9 @@ bv_range_evi_all <- lapply(bv_dates, FUN = get_evi_bv_range)
 load("Spatial_Layers/Productivity_comparison/Barkerville/bv_range_evi_all.RData")
 plot(bv_range_evi_all[[1]])
 
-names(bv_range_evi_all) <- bv_dates
+names(bv_range_evi_all) <- bv_dates[1:91]
 
-bv_evi_all_stack <- stack(bv_range_evi_all)
+bv_evi_all_stack <- raster::stack(bv_range_evi_all)
 
 # filter to july dates, average within
 bv_jul_evi_all <- raster::subset(bv_evi_all_stack,
@@ -850,9 +845,10 @@ bv_jul_year_groups <- as_tibble(bv_dates) %>%
   group_by(year) %>% 
   mutate(group = cur_group_id())
 
-bv_jul_evi <- stackApply(bv_jul_evi_all, 
+bv_jul_evi <- raster::stackApply(bv_jul_evi_all, 
                            indices = bv_jul_year_groups$group,
                            fun = mean)
+save(bv_jul_evi, file = "Spatial_Layers/Productivity_comparison/Barkerville/bv_jul_evi.RData")
 plot(bv_jul_evi$index_1)
 plot(st_geometry(bv_cut), add = T)
 
@@ -1201,18 +1197,18 @@ atha_range_evi_all <- lapply(atha_dates, FUN = get_evi_atha_range)
 plot(st_geometry(atha_range))
 plot(atha_range_evi_all[[1]], add = T)
 
-<<<<<<< HEAD
+
 load("Spatial_Layers/Productivity_comparison/Athabasca/atha_range_evi_all.RData")
 plot(atha_range_evi_all[[1]])
 
 names(atha_range_evi_all) <- atha_dates[1:91]
 
-atha_evi_all_stack <- stack(atha_range_evi_all)
+atha_evi_all_stack <- raster::stack(atha_range_evi_all)
 
 # filter to july dates, average within
 atha_jul_evi_all <- raster::subset(atha_evi_all_stack,
-                                 grep('\\.07\\.', 
-                                      names(atha_evi_all_stack), 
+                                   grep('\\.07\\.', 
+                                        names(atha_evi_all_stack), 
                                       value = T))
 
 atha_jul_year_groups <- as_tibble(atha_dates) %>% 
@@ -1222,11 +1218,12 @@ atha_jul_year_groups <- as_tibble(atha_dates) %>%
   group_by(year) %>% 
   mutate(group = cur_group_id())
 
-atha_jul_evi <- stackApply(atha_jul_evi_all, 
-                         indices = atha_jul_year_groups$group,
-                         fun = mean)
+atha_jul_evi <- raster::stackApply(atha_jul_evi_all, 
+                                   indices = atha_jul_year_groups$group,
+                                   fun = mean)
 plot(atha_jul_evi$index_1)
 plot(st_geometry(atha_range), add = T)
+save(atha_jul_evi, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_jul_evi.RData")
 
 # filter to Sept dates, average within
 atha_sep_evi_all <- raster::subset(atha_evi_all_stack,
@@ -1241,7 +1238,7 @@ atha_sep_year_groups <- as_tibble(atha_dates[1:91]) %>%
   group_by(year) %>% 
   mutate(group = cur_group_id())
 
-atha_sep_evi <- stackApply(atha_sep_evi_all, 
+atha_sep_evi <- raster::stackApply(atha_sep_evi_all, 
                          indices = atha_sep_year_groups$group,
                          fun = mean)
 plot(atha_sep_evi$index_1)
@@ -1250,33 +1247,17 @@ plot(atha_sep_evi$index_1)
 atha_delta_evi <- atha_jul_evi - atha_sep_evi
 plot(atha_delta_evi$layer.1)
 
+#save(atha_range_evi_all, file = "atha_range_evi_all.RData")
+
 ### NTEMS Cutblock Data
-ntems_cut <- raster("Spatial_Layers/NTEMS_Forest_Harvest_1985-2020/CA_Forest_Harvest_1985-2020.tif")
-plot(ntems_cut)
-crs(ntems_cut)
 
 atha_bbox_nad83 <- st_transform(atha_bbox, crs = crs(ntems_cut)) %>% 
   st_as_sf()
-atha_cut <- crop(ntems_cut, extent(atha_bbox_nad83))
-plot(atha_cut)
 
-atha_cut <- projectRaster(atha_cut, crs = crs(atha_range)); beep(8)
-plot(atha_cut)
-plot(st_geometry(atha_range), add = T)
-
-atha_cut_mask <- mask(atha_cut, atha_range)
-plot(atha_cut_mask)
-
-# could vectorize these cutblock polygons and then use old function or try to remake it using rasters for evi and cutblocks...
-atha_cut_vec <- rasterToPolygons(atha_cut_mask, na.rm = T, dissolve = F); beep(8)
-# started 11:23 am... didn't finish by end of day
-
-### Try with terra package instead, seems to be quicker
+### With terra package
 ntems_cut <- rast("Spatial_Layers/NTEMS_Forest_Harvest_1985-2020/CA_Forest_Harvest_1985-2020.tif")
 plot(ntems_cut)
 crs(ntems_cut)
-# test <- clamp(ntems_cut, lower = 1, values = F)
-# hist(test)
 
 atha_bbox_nad83 <- vect(atha_bbox_nad83)
 atha_range_sv <- vect(atha_range)
@@ -1311,7 +1292,7 @@ plot(atha_range_sv, add = T) # looks good
 
 atha_cut_poly <- disagg(atha_cut_poly)
 atha_cut_poly #20051 cutblock polygons... 
-plot(atha_cut_poly[3000])/1e6
+plot(atha_cut_poly[3000])
 
 # exclude "cutblocks" that are only one grid cell - likely roads/not actually cutblocks?
 atha_cut_poly$area <- expanse(atha_cut_poly)
@@ -1333,7 +1314,7 @@ atha_jul_evi_sr
 
 # extract evi across cutblock polygons:
 atha_cut_yearly_evi <- terra::extract(atha_jul_evi_sr, atha_cut_poly,
-                                 fun = mean, method = "bilinear")
+                                      fun = mean, method = "bilinear")
 
 # rename evi "index x" to years, covert to long format, add year since cut info
 colnames(atha_cut_yearly_evi)[2:24] <- c(2000:2022)
@@ -1349,14 +1330,83 @@ atha_cut_yearly_evi <- atha_cut_yearly_evi %>%
 hist(atha_cut_yearly_evi$year_since_cut)
 
 ggplot(atha_cut_yearly_evi, aes(x = year_since_cut,
-                                y = jul_evi)) +
+                                y = evi)) +
   #geom_point(size = 0.1, alpha = 0.05) +
   geom_smooth()
 
 # should weight cutblock influence by size in the model somehow...
-=======
-save(atha_range_evi_all, file = "atha_range_evi_all.RData")
->>>>>>> f3fdfafab8d1074a532a70d2fa33c5f69b71aa38
+
+### fires
+ntems_fire <- rast("Spatial_Layers/NTEMS_Forest_Fire_1985-2020/CA_Forest_Fire_1985-2020.tif")
+plot(ntems_fire)
+
+atha_fire_crop <- crop(ntems_fire, atha_bbox_nad83)
+plot(atha_fire_crop)
+
+atha_fire_crop <- terra::project(atha_fire_crop, crs(atha_range),
+                                 method = "near") # year data is categorigal, not continuous
+plot(atha_fire_crop)
+plot(atha_range_sv, add = T)
+
+atha_fire_mask <- mask(atha_fire_crop, atha_range_sv)
+plot(atha_fire_mask)
+
+hist(atha_fire_mask$`CA_Forest_Fire_1985-2020`)
+
+# remove 0s
+atha_fire_mask <- clamp(atha_fire_mask, lower = 1, upper = 3000,
+                       values = F)
+plot(atha_fire_mask)
+plot(atha_range_sv, add = T)
+
+hist(atha_fire_mask$`CA_Forest_Fire_1985-2020`)
+
+# turn into polygons:
+atha_fire_poly <- as.polygons(atha_fire_mask, values = T,
+                              dissolve = T, na.rm = T)
+atha_fire_poly <- atha_fire_poly %>% 
+  rename(year_fire = `CA_Forest_Fire_1985-2020`)
+plot(atha_fire_poly)
+plot(atha_range_sv, add = T) # looks good
+# one polygon feature for each year... disaggregate
+
+atha_fire_poly <- disagg(atha_fire_poly)
+atha_fire_poly #26193 fireblock polygons... 
+plot(atha_fire_poly[3005])
+
+# exclude "cutblocks" that are only one grid cell - likely roads/not actually cutblocks?
+atha_fire_poly$area <- expanse(atha_fire_poly)
+mean(atha_fire_poly$area) # ~15 ha
+
+atha_fire_poly <- atha_fire_poly %>% 
+  dplyr::filter(area > 1000) %>% 
+  mutate(fire_id = row_number())
+atha_fire_poly # 11978 fireblocks
+plot(atha_fire_poly)
+sum(atha_fire_poly$area)/1e6 # 4118.8 km2
+
+# extract evi across fireblock polygons:
+atha_fire_yearly_evi <- terra::extract(atha_jul_evi_sr, atha_fire_poly,
+                                       fun = mean, method = "bilinear")
+
+# rename evi "index x" to years, covert to long format, add year since fire info
+colnames(atha_fire_yearly_evi)[2:24] <- c(2000:2022)
+
+atha_fire_yearly_evi <- atha_fire_yearly_evi %>% 
+  rename(fire_id = ID) %>% 
+  pivot_longer(cols = -fire_id, names_to = "year_evi",
+               values_to = "evi") %>% 
+  left_join(as_tibble(atha_fire_poly), by = "fire_id") %>% 
+  mutate(year_since_fire = as.numeric(year_evi) - year_fire,
+         type = "jul_evi")
+
+hist(atha_fire_yearly_evi$year_since_fire)
+
+ggplot(atha_fire_yearly_evi, aes(x = year_since_fire,
+                                 y = evi)) +
+  geom_point(size = 0.1, alpha = 0.05) +
+  geom_smooth()
+
 
 ##### Snake-Sahtaneh #####
 snake <- vect("Spatial_Layers/Productivity_comparison/BC_Caribou_Ranges/GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
@@ -1373,7 +1423,7 @@ snake_utm_crs <- lonlat2UTM(c(snake_centroid[[1]], snake_centroid[[2]]))
 # UTM zone 10 (same as itcha)
 
 snake_range <- terra::project(x = snake, y = crs(sta.utm))
-plot(snake_range)
+terra::plot(snake_range)
 
 snake_dates <- mt_dates(product = "MOD13Q1", lat = snake_centroid[[2]],
                        lon = snake_centroid[[1]]) %>% 
@@ -1387,8 +1437,8 @@ save(snake_centroid, snake_range, file = "Spatial_Layers/Productivity_comparison
 
 # write function for extracting evi
 get_evi_snake_range <- function(dates){
-  evi_right <- mt_subset(product = "MOD13Q1",
-                         lat = snake_centroid[[2]], 
+  evi_top <- mt_subset(product = "MOD13Q1",
+                         lat = snake_centroid[[2]] + 0.3, 
                          lon = snake_centroid[[1]], # xmin
                          band = "250m_16_days_EVI",
                          start = snake_dates[1],
@@ -1396,12 +1446,12 @@ get_evi_snake_range <- function(dates){
                          km_lr = 100, 
                          km_ab = 100,
                          internal = TRUE)
-  evi_right_raster <- mt_to_terra(evi_right, 
-                                   reproject = F)
-  evi_right_utm <- project(evi_right_raster,
+  evi_top_raster <- mt_to_terra(evi_top, 
+                                reproject = F)
+  evi_top_utm <- terra::project(evi_top_raster,
                            crs(sta.utm))
   
-  plot(evi_right_utm)
+  plot(evi_top_utm)
   plot(snake_range, add = T)
   
   # evi_left <- mt_subset(product = "MOD13Q1",
@@ -1451,8 +1501,76 @@ get_evi_snake_range <- function(dates){
 }
 
 
+##### Sask Boreal #####
+# subset of Neufeld et al 2021 paper study area in the northern boreal of saskatchewan
+sask_subset <- vect("Spatial_Layers/Productivity_comparison/Sask_Boreal/range_subset_poly/")
+plot(sask_subset)
 
+sask_centroid <- sask_subset %>% 
+  terra::project(y = crs(sta.wgs)) %>% 
+  terra::centroids() %>%
+  crds()
+sask_centroid[[1]]
 
+sask_utm_crs <- lonlat2UTM(c(sask_centroid[[1]], sask_centroid[[2]]))
+# UTM zone 13
+
+sask_range <- terra::project(x = sask_subset, "epsg:32613")
+terra::plot(sask_range)
+
+sask_dates <- mt_dates(product = "MOD13Q1", lat = sask_centroid[[2]],
+                        lon = sask_centroid[[1]]) %>% 
+  mutate(month = month(ymd(calendar_date))) %>% 
+  filter(month %in% c(7, 9)) %>% 
+  pull(calendar_date)
+
+get_evi_sask_range <- function(dates){
+  evi_right <- mt_subset(product = "MOD13Q1",
+                       lat = sask_centroid[[2]], 
+                       lon = sask_centroid[[1]] + 0.3, # xmin
+                       band = "250m_16_days_EVI",
+                       start = sask_dates[1],
+                       end = sask_dates[1],
+                       km_lr = 100, 
+                       km_ab = 100,
+                       internal = TRUE)
+  evi_right_raster <- mt_to_terra(evi_right, 
+                                  reproject = F)
+  evi_right_utm <- terra::project(evi_right_raster,
+                                "epsg:32613")
+  
+  plot(evi_right_utm)
+  plot(sask_range, add = T)
+  
+  evi_left <- mt_subset(product = "MOD13Q1",
+                         lat = sask_centroid[[2]], 
+                         lon = sask_centroid[[1]] - 0.3, # xmin
+                         band = "250m_16_days_EVI",
+                         start = sask_dates[1],
+                         end = sask_dates[1],
+                         km_lr = 100, 
+                         km_ab = 100,
+                         internal = TRUE)
+  evi_left_raster <- mt_to_terra(evi_left, 
+                                  reproject = F)
+  evi_left_utm <- terra::project(evi_left_raster,
+                                 "epsg:32613")
+  
+  plot(sask_range)
+  plot(evi_right_utm, add = T) 
+  plot(evi_left_utm, add = T)
+  plot(sask_range, add = T)
+
+  evi_merged <- terra::merge(evi_right_raster,
+                              evi_left_raster)
+
+  evi_utm <- terra::project(evi_merged,
+                           crs = "epsg:32613")
+
+  sask_evi_mask <- terra::mask(evi_utm, sask_range)
+  plot(sask_evi_mask)
+  plot(sask_range add = T)
+}
 
 
 ##### Modelling #####
