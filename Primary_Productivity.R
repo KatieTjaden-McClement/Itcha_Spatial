@@ -4,8 +4,6 @@
 #mt_to_raster was replaced with mt_to_terra in version 1.1.4
 #need to download older verison
 
-#devtools::install_version("MODISTools", "1.1.2")
-
 library(tidyverse)
 library(sf)
 library(terra)
@@ -1354,12 +1352,12 @@ ggplot(atha_cut_yearly_evi, aes(x = year_since_cut,
   geom_smooth()
 
 # should weight cutblock influence by size in the model somehow...
-=======
+
 save(atha_range_evi_all, file = "atha_range_evi_all.RData")
->>>>>>> f3fdfafab8d1074a532a70d2fa33c5f69b71aa38
+
 
 ##### Snake-Sahtaneh #####
-snake <- vect("Spatial_Layers/Productivity_comparison/BC_Caribou_Ranges/GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
+snake <- vect("GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
   filter(HERD_NAME == "Snake-Sahtaneh")
 plot(snake)
 
@@ -1372,7 +1370,7 @@ snake_centroid[[1]]
 snake_utm_crs <- lonlat2UTM(c(snake_centroid[[1]], snake_centroid[[2]]))
 # UTM zone 10 (same as itcha)
 
-snake_range <- terra::project(x = snake, y = crs(sta.utm))
+snake_range <- terra::project(x = snake, y = "epsg:32610")
 plot(snake_range)
 
 snake_dates <- mt_dates(product = "MOD13Q1", lat = snake_centroid[[2]],
@@ -1387,71 +1385,57 @@ save(snake_centroid, snake_range, file = "Spatial_Layers/Productivity_comparison
 
 # write function for extracting evi
 get_evi_snake_range <- function(dates){
-  evi_right <- mt_subset(product = "MOD13Q1",
-                         lat = snake_centroid[[2]], 
+  evi_top <- mt_subset(product = "MOD13Q1",
+                         lat = snake_centroid[[2]]+ 0.3, 
                          lon = snake_centroid[[1]], # xmin
                          band = "250m_16_days_EVI",
-                         start = snake_dates[1],
-                         end = snake_dates[1],
+                         start = dates,
+                         end = dates,
                          km_lr = 100, 
-                         km_ab = 100,
+                         km_ab = 50,
                          internal = TRUE)
-  evi_right_raster <- mt_to_terra(evi_right, 
+  evi_top_raster <- mt_to_terra(evi_top, 
                                    reproject = F)
-  evi_right_utm <- project(evi_right_raster,
-                           crs(sta.utm))
+  # evi_top_utm <- terra::project(evi_top_raster,
+  #                        "epsg:32610")
+  # 
+  # terra::plot(evi_top_utm)
+  # terra::plot(snake_range, add = T)
   
-  plot(evi_right_utm)
-  plot(snake_range, add = T)
-  
-  # evi_left <- mt_subset(product = "MOD13Q1",
-  #                       lat = atha_aoi_centre[2] -0.7, # can probably go to like -0.6
-  #                       lon = atha_aoi_centre[1] - 1.1, # xmin
-  #                       band = "250m_16_days_EVI",
-  #                       start = atha_dates[1],
-  #                       end = atha_dates[1],
-  #                       km_lr = 100, 
-  #                       km_ab = 100,
-  #                       internal = TRUE); beep(8)
-  # evi_left_raster <- mt_to_raster(evi_left, 
-  #                                 reproject = F)
-  # evi_left_utm <- projectRaster(evi_left_raster,
-  #                               crs = crs(atha_range))
+  evi_bottom <- mt_subset(product = "MOD13Q1",
+                        lat = snake_centroid[[2]]-0.4, # can probably go to like -0.6
+                        lon = snake_centroid[[1]], # xmin
+                        band = "250m_16_days_EVI",
+                        start = dates,
+                        end = dates,
+                        km_lr = 100,
+                        km_ab = 60,
+                        internal = TRUE)
+  evi_bottom_raster <- mt_to_terra(evi_bottom,
+                                  reproject = F)
+  # evi_bottom_utm <- terra::project(evi_bottom_raster,
+  #                                  "epsg:32610")
   # 
-  # evi_middle <-  mt_subset(product = "MOD13Q1",
-  #                          lat = atha_aoi_centre[2], 
-  #                          lon = atha_aoi_centre[1], # xmin
-  #                          band = "250m_16_days_EVI",
-  #                          start = atha_dates[1],
-  #                          end = atha_dates[1],
-  #                          km_lr = 50, 
-  #                          km_ab = 100,
-  #                          internal = TRUE)
-  # evi_middle_raster <- mt_to_raster(evi_middle, 
-  #                                   reproject = F)
-  # evi_middle_utm <- projectRaster(evi_middle_raster,
-  #                                 crs = crs(atha_range))
-  # 
-  # plot(evi_right_utm)
-  # plot(evi_middle_utm, add = T)
-  # plot(evi_left_utm, add = T)
-  # plot(st_geometry(atha_range), add = T)
-  # 
-  # 
-  # evi_merged <- raster::merge(evi_right_raster, 
-  #                             evi_left_raster,
-  #                             evi_middle_raster)
-  # 
-  # evi_utm <- projectRaster(evi_merged, 
-  #                          crs = crs(atha_range))
-  # 
-  # atha_evi_mask <- raster::mask(evi_utm, atha_range)
-  # plot(atha_evi_mask)
-  # plot(st_geometry(atha_range), add = T)
+  # plot(snake_range)
+  # plot(evi_top_utm, add = T)
+  # plot(evi_bottom_utm, add = T)
+  # plot(snake_range, add = T)
+ 
+  evi_merged <- terra::merge(evi_top_raster,
+                             evi_bottom_raster)
+
+  evi_utm <- terra::project(evi_merged,
+                     "epsg:32610")
+
+  snake_evi_mask <- terra::mask(evi_utm, snake_range)
+  # plot(snake_evi_mask)
+  # plot(snake_range, add = T)
 }
 
+snake_range_evi_all <- lapply(snake_dates, FUN = get_evi_snake_range)
+# started 12:30 pm July 24, finished by 9:30am July 28
 
-
+save(snake_range_evi_all, file = "snake_range_evi_all.RData")
 
 
 
