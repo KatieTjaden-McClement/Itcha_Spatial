@@ -24,7 +24,7 @@ theme_set(theme_classic())
 
 # load station data for reference 
 sta <- as_tibble(read.csv("stations.csv", header=T))
-sta.wgs <- st_as_sf(sta, coords = c("longitude", "latitude"), crs=4326)
+sta.wgs <- sf::st_as_sf(sta, coords = c("longitude", "latitude"), crs=4326)
 
 mlong <- mean(sta$longitude); mlat <- mean(sta$latitude)
 
@@ -235,7 +235,8 @@ merge_within_year_groups <- as_tibble(jul_dates) %>%
 ii_jul_evi <- raster::stackApply(ii_range_jul_evi_all_stack, 
                                  indices = merge_within_year_groups$group,
                                  fun = mean) # returns rasterBrick object
-#save(ii_jul_evi, file = "Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_jul_evi.RData")
+#writeRaster(rast(ii_jul_evi), filename = "Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_jul_evi.tif")
+
 plot(ii_range_jul_evi$index_23)
 
 plot(st_geometry(II_ranges))
@@ -659,7 +660,7 @@ purc_jul_year_groups <- as_tibble(purc_dates) %>%
 purc_jul_evi <- raster::stackApply(purc_jul_evi_all, 
                            indices = purc_jul_year_groups$group,
                            fun = mean)
-save(purc_jul_evi, file = "Spatial_Layers/Productivity_comparison/Purcells/purc_jul_evi.RData")
+writeRaster(rast(purc_jul_evi), filename = "Spatial_Layers/Productivity_comparison/Purcells/purc_jul_evi.tif")
 plot(purc_jul_evi$index_1)
 
 # filter to Sept dates, average within
@@ -848,7 +849,7 @@ bv_jul_year_groups <- as_tibble(bv_dates) %>%
 bv_jul_evi <- raster::stackApply(bv_jul_evi_all, 
                            indices = bv_jul_year_groups$group,
                            fun = mean)
-save(bv_jul_evi, file = "Spatial_Layers/Productivity_comparison/Barkerville/bv_jul_evi.RData")
+writeRaster(bv_jul_evi, filename = "Spatial_Layers/Productivity_comparison/Barkerville/bv_jul_evi.tif")
 plot(bv_jul_evi$index_1)
 plot(st_geometry(bv_cut), add = T)
 
@@ -1223,7 +1224,7 @@ atha_jul_evi <- raster::stackApply(atha_jul_evi_all,
                                    fun = mean)
 plot(atha_jul_evi$index_1)
 plot(st_geometry(atha_range), add = T)
-save(atha_jul_evi, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_jul_evi.RData")
+writeRaster(atha_jul_evi, filename = "Spatial_Layers/Productivity_comparison/Athabasca/atha_jul_evi.tif")
 
 # filter to Sept dates, average within
 atha_sep_evi_all <- raster::subset(atha_evi_all_stack,
@@ -1569,7 +1570,7 @@ get_evi_sask_range <- function(dates){
 
   sask_evi_mask <- terra::mask(evi_utm, sask_range)
   plot(sask_evi_mask)
-  plot(sask_range add = T)
+  plot(sask_range, add = T)
 }
 
 
