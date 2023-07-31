@@ -473,7 +473,7 @@ sep_oct_dates <- mt_dates(product = "MOD13Q1", lat = aoi_centre[2],
 head(sep_oct_dates) #69 dates
 
 ii_range_fall_evi_all <- lapply(sept_oct_dates, FUN = get_evi_rast_ii_range)
-load("II_EVI_downloads/ii_range_fall_evi_all.RData")
+load("Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_range_fall_evi_all.RData")
 
 names(ii_range_fall_evi_all) <- sep_oct_dates
 
@@ -516,8 +516,10 @@ ii_range_sep_evi <- stackApply(ii_range_sep_evi_all,
 plot(ii_range_sep_evi$index_18)
 
 # subtract average september evi from average july evi
-ii_range_delta_evi <- ii_range_jul_evi - ii_range_sep_evi
+ii_delta_evi <- ii_jul_evi - ii_range_sep_evi
 plot(ii_range_delta_evi$layer.4)
+
+writeRaster(rast(ii_delta_evi), filename = "Spatial_Layers/Productivity_comparison/Itcha_Ilgachuz/ii_delta_evi.tif")
 
 # look at delta evi across cutblocks
 ii_cut_yearly_delta_evi <- lapply(ii_cut_list, ii_range_delta_evi,
@@ -684,6 +686,8 @@ plot(purc_sep_evi$index_1)
 # Delta EVI
 purc_delta_evi <- purc_jul_evi - purc_sep_evi
 plot(purc_delta_evi$layer.1)
+
+writeRaster(rast(purc_delta_evi), filename = "Spatial_Layers/Productivity_comparison/Purcells/purc_delta_evi.tif")
 
 ### Extract Jul evi across purcells cutblocks and fires
 purc_cut_all <- st_read("Spatial_Layers/Productivity_comparison/Purcells/Purcells_Cons_Cutblocks/VEG_CONSOLIDATED_CUT_BLOCKS_SP.gdb") %>% 
@@ -874,6 +878,8 @@ plot(bv_sep_evi$index_1)
 # Delta EVI
 bv_delta_evi <- bv_jul_evi - bv_sep_evi
 plot(bv_delta_evi$layer.1)
+
+writeRaster(rast(bv_delta_evi), filename = "Spatial_Layers/Productivity_comparison/Barkerville/bv_delta_evi.tif")
 
 ### Extract Jul evi across bv cutblocks and fires
 bv_cut_all <- st_read("Spatial_Layers/Productivity_comparison/Barkerville/BV_Cons_Cutblocks/VEG_CONSOLIDATED_CUT_BLOCKS_SP.gdb/") %>% 
@@ -1248,7 +1254,7 @@ plot(atha_sep_evi$index_1)
 atha_delta_evi <- atha_jul_evi - atha_sep_evi
 plot(atha_delta_evi$layer.1)
 
-#save(atha_range_evi_all, file = "atha_range_evi_all.RData")
+writeRaster(atha_delta_evi, file = "Spatial_Layers/Productivity_comparison/Athabasca/atha_delta_evi.tif")
 
 ### NTEMS Cutblock Data
 
@@ -1412,7 +1418,7 @@ ggplot(atha_fire_yearly_evi, aes(x = year_since_fire,
 
 
 ##### Snake-Sahtaneh #####
-snake <- vect("GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
+snake <- vect("Spatial_Layers/Productivity_comparison/BC_Caribou_Ranges/GCPB_CARIBOU_POPULATION_SP.gdb/") %>% 
   filter(HERD_NAME == "Snake-Sahtaneh")
 plot(snake)
 
@@ -1434,7 +1440,6 @@ snake_dates <- mt_dates(product = "MOD13Q1", lat = snake_centroid[[2]],
   filter(month %in% c(7, 9)) %>% 
   pull(calendar_date)
 
-save(snake_centroid, snake_range, file = "Spatial_Layers/Productivity_comparison/Snake_Sahtaneh/snake_aoi_and_range.RData")
 # plot(atha_range)
 # atha_range_sf <- st_as_sf(atha_range)
 
@@ -1488,7 +1493,54 @@ get_evi_snake_range <- function(dates){
 snake_range_evi_all <- lapply(snake_dates, FUN = get_evi_snake_range)
 # started 12:30 pm July 24, finished by 9:30am July 28
 
-save(snake_range_evi_all, file = "snake_range_evi_all.RData")
+snake_range_evi_all_stack <- rast(snake_range_evi_all)
+
+#writeRaster(snake_range_evi_all_stack, file = "snake_range_evi_all_stack.tif")
+snake_evi_all_stack <- rast("Spatial_Layers/Productivity_comparison/Snake_Sahtaneh/snake_range_evi_all_stack.tif")
+plot(snake_evi_all_stack$`2000-07-11`)
+
+# filter to july dates, average within
+snake_jul_evi_all <- terra::subset(snake_evi_all_stack,
+                                   subset = grep('\\-07', 
+                                        names(snake_evi_all_stack), 
+                                        value = T))
+
+snake_jul_year_groups <- as_tibble(snake_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 7) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+snake_jul_evi <- terra::tapp(snake_jul_evi_all,
+                            index = snake_jul_year_groups$group,
+                            fun = mean)
+plot(snake_jul_evi$X1)
+writeRaster(snake_jul_evi, filename = "Spatial_Layers/Productivity_comparison/Snake_Sahtaneh/snake_jul_evi.tif")
+
+# filter to Sept dates, average within
+snake_sep_evi_all <- raster::subset(snake_evi_all_stack,
+                                   grep('\\-09', 
+                                        names(snake_evi_all_stack), 
+                                        value = T))
+
+snake_sep_year_groups <- as_tibble(snake_dates) %>% 
+  mutate(year = year(ymd(value)),
+         month = month(ymd(value))) %>% 
+  filter(month == 9) %>% 
+  group_by(year) %>% 
+  mutate(group = cur_group_id())
+
+snake_sep_evi <- tapp(snake_sep_evi_all, 
+                      index = snake_sep_year_groups$group,
+                      fun = mean)
+plot(snake_sep_evi$X1)
+
+# Delta EVI
+snake_delta_evi <- snake_jul_evi - snake_sep_evi
+plot(snake_delta_evi$X1)
+
+writeRaster(snake_delta_evi, filename = "Spatial_Layers/Productivity_comparison/Snake_Sahtaneh/snake_delta_evi.tif")
 
 ##### Sask Boreal #####
 # subset of Neufeld et al 2021 paper study area in the northern boreal of saskatchewan
