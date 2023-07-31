@@ -1503,11 +1503,11 @@ get_evi_snake_range <- function(dates){
 
 ##### Sask Boreal #####
 # subset of Neufeld et al 2021 paper study area in the northern boreal of saskatchewan
-sask_subset <- vect("Spatial_Layers/Productivity_comparison/Sask_Boreal/range_subset_poly/")
+sask_subset <- vect("Sask_range_subset_poly/")
 plot(sask_subset)
 
 sask_centroid <- sask_subset %>% 
-  terra::project(y = crs(sta.wgs)) %>% 
+  terra::project("epsg:4326") %>% 
   terra::centroids() %>%
   crds()
 sask_centroid[[1]]
@@ -1527,51 +1527,58 @@ sask_dates <- mt_dates(product = "MOD13Q1", lat = sask_centroid[[2]],
 get_evi_sask_range <- function(dates){
   evi_right <- mt_subset(product = "MOD13Q1",
                        lat = sask_centroid[[2]], 
-                       lon = sask_centroid[[1]] + 0.3, # xmin
+                       lon = sask_centroid[[1]] + 1.1, # xmin
                        band = "250m_16_days_EVI",
-                       start = sask_dates[1],
-                       end = sask_dates[1],
+                       start = dates,
+                       end = dates,
                        km_lr = 100, 
-                       km_ab = 100,
+                       km_ab = 70,
                        internal = TRUE)
   evi_right_raster <- mt_to_terra(evi_right, 
                                   reproject = F)
   evi_right_utm <- terra::project(evi_right_raster,
-                                "epsg:32613")
+                                  "epsg:32613")
   
-  plot(evi_right_utm)
-  plot(sask_range, add = T)
+  # plot(sask_range)
+  # plot(evi_right_utm)
+  # plot(sask_range, add = T)
   
   evi_left <- mt_subset(product = "MOD13Q1",
-                         lat = sask_centroid[[2]], 
-                         lon = sask_centroid[[1]] - 0.3, # xmin
+                         lat = sask_centroid[[2]] - 0.35, 
+                         lon = sask_centroid[[1]] - 0.5, # xmin
                          band = "250m_16_days_EVI",
-                         start = sask_dates[1],
-                         end = sask_dates[1],
-                         km_lr = 100, 
-                         km_ab = 100,
+                         start = dates,
+                         end = dates,
+                         km_lr = 75, 
+                         km_ab = 80,
                          internal = TRUE)
   evi_left_raster <- mt_to_terra(evi_left, 
                                   reproject = F)
   evi_left_utm <- terra::project(evi_left_raster,
                                  "epsg:32613")
-  
-  plot(sask_range)
-  plot(evi_right_utm, add = T) 
-  plot(evi_left_utm, add = T)
-  plot(sask_range, add = T)
+  # 
+  # plot(sask_range)
+  # plot(evi_right_utm, add = T) 
+  # plot(evi_left_utm, add = T)
+  # plot(sask_range, add = T)
 
   evi_merged <- terra::merge(evi_right_raster,
                               evi_left_raster)
 
   evi_utm <- terra::project(evi_merged,
-                           crs = "epsg:32613")
+                            "epsg:32613")
 
   sask_evi_mask <- terra::mask(evi_utm, sask_range)
-  plot(sask_evi_mask)
-  plot(sask_range add = T)
+  # plot(sask_evi_mask)
+  # plot(sask_range, add = T)
 }
 
+sask_range_evi_all <- lapply(sask_dates, FUN = get_evi_sask_range)
+# started 5pm July 26
+
+sask_range_evi_all_stack <- rast(sask_range_evi_all)
+writeRaster(sask_range_evi_all_stack,
+            filename = "sask_range_evi_all_stack.tif")
 
 ##### Modelling #####
 load("Spatial_Layers/Productivity_comparison/cut_jul_evi_range_comp.RData")
